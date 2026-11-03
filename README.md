@@ -4,6 +4,7 @@
 - [ゆるゆるシェーダー交流会 #2](https://connpass.com/event/405564/)のLT用のリポジトリ
 - 指数関数高さフォグについて5分程度話す
 - https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/ に元ネタがある
+- https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8 に数式と近似の詳細（Pickles Note）がある
 - スライドを作るだけだとつまらないので、インタラクティブなスライドにしてWebにデプロイしたい
 - GitHub Pagesまたはcloudflare workersで
 
