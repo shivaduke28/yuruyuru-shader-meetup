@@ -116,15 +116,12 @@ body.slides {
   user-select: none;
 }
 
-/* 文字ページ: コンテンツ行を消して、本文を残りの高さの中で縦中央に置く */
+/* 文字ページ: コンテンツ行を消して、本文をデモと同じ上端から始める */
 .stage.layout-text .content {
   display: none;
 }
 
 .stage.layout-text .body {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   font-size: 58px;
 }
 

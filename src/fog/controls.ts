@@ -19,48 +19,77 @@ export const controlPresets = {
   fogColor: { key: 'fogColor', mode: 'color', label: 'fog color' },
 } satisfies Record<string, ControlSpec>
 
-/**
- * Tweakpane は配列を直接バインドできないので、
- * 編集用のプレーンオブジェクトを挟んで target の Vec3 に書き戻す。
- */
-const bindVec3 = (folder: FolderApi | Pane, target: Vec3, spec: Extract<ControlSpec, { mode: 'scalar' | 'rgb' }>) => {
-  const { min, max, step } = spec
-  if (spec.mode === 'scalar') {
-    const o = { v: target[0] }
-    const b = folder.addBinding(o, 'v', { label: spec.label, min, max, step })
-    b.on('change', (ev) => {
-      target[0] = target[1] = target[2] = ev.value
-    })
-    return () => {
-      o.v = target[0]
-      b.refresh()
-    }
-  }
-  const o = { R: target[0], G: target[1], B: target[2] }
-  const f = folder.addFolder({ title: spec.label, expanded: true })
-  const bs = (['R', 'G', 'B'] as const).map((ch, i) =>
-    f.addBinding(o, ch, { min, max, step }).on('change', (ev) => {
-      target[i] = ev.value
-    }),
-  )
-  return () => {
-    o.R = target[0]
-    o.G = target[1]
-    o.B = target[2]
+// refresh() は値が変わっていると change を同期で投げるので、その間はユーザー操作として扱わない
+let refreshing = false
+const refreshQuietly = (bs: { refresh(): void }[]) => {
+  refreshing = true
+  try {
     bs.forEach((b) => b.refresh())
+  } finally {
+    refreshing = false
   }
 }
 
-const bindColor = (folder: FolderApi | Pane, target: Vec3, label: string) => {
-  const o = { c: { r: target[0], g: target[1], b: target[2] } }
+/**
+ * Tweakpane は配列を直接バインドできないので、編集用のプレーンオブジェクトを挟む。
+ * 表示は display から読み、ユーザーの操作は target に書く (スライドでは display = 補間中の値、target = 目標値)。
+ */
+const bindVec3 = (
+  folder: FolderApi | Pane,
+  display: Vec3,
+  target: Vec3,
+  spec: Extract<ControlSpec, { mode: 'scalar' | 'rgb' }>,
+  onUserChange: () => void,
+) => {
+  const { min, max, step } = spec
+  if (spec.mode === 'scalar') {
+    const o = { v: display[0] }
+    const b = folder.addBinding(o, 'v', { label: spec.label, min, max, step })
+    b.on('change', (ev) => {
+      if (refreshing) return
+      target[0] = target[1] = target[2] = ev.value
+      onUserChange()
+    })
+    return () => {
+      o.v = display[0]
+      refreshQuietly([b])
+    }
+  }
+  const o = { R: display[0], G: display[1], B: display[2] }
+  const f = folder.addFolder({ title: spec.label, expanded: true })
+  const bs = (['R', 'G', 'B'] as const).map((ch, i) =>
+    f.addBinding(o, ch, { min, max, step }).on('change', (ev) => {
+      if (refreshing) return
+      target[i] = ev.value
+      onUserChange()
+    }),
+  )
+  return () => {
+    o.R = display[0]
+    o.G = display[1]
+    o.B = display[2]
+    refreshQuietly(bs)
+  }
+}
+
+const bindColor = (
+  folder: FolderApi | Pane,
+  display: Vec3,
+  target: Vec3,
+  label: string,
+  onUserChange: () => void,
+) => {
+  const o = { c: { r: display[0], g: display[1], b: display[2] } }
   const b = folder.addBinding(o, 'c', { label, color: { type: 'float' } }).on('change', (ev) => {
+    if (refreshing) return
     target[0] = ev.value.r
     target[1] = ev.value.g
     target[2] = ev.value.b
+    onUserChange()
   })
   return () => {
-    o.c = { r: target[0], g: target[1], b: target[2] }
-    b.refresh()
+    o.c = { r: display[0], g: display[1], b: display[2] }
+    refreshQuietly([b])
   }
 }
 
@@ -75,12 +104,16 @@ export const createFogPane = (
   target: FogParams,
   specs: ControlSpec[],
   title?: string,
+  /** 表示に使う値。省略時は target をそのまま表示する */
+  display: FogParams = target,
+  /** ユーザーが値を変えたときに呼ぶ */
+  onUserChange: () => void = () => {},
 ): BoundPane => {
   const pane = new Pane({ container, title, expanded: true })
   const refreshers = specs.map((spec) =>
     spec.mode === 'color'
-      ? bindColor(pane, target[spec.key], spec.label)
-      : bindVec3(pane, target[spec.key], spec),
+      ? bindColor(pane, display[spec.key], target[spec.key], spec.label, onUserChange)
+      : bindVec3(pane, display[spec.key], target[spec.key], spec, onUserChange),
   )
   return {
     pane,

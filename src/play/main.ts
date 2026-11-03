@@ -1,6 +1,6 @@
 import '../style.css'
 import { createFogRenderer } from '../fog/renderer'
-import { cloneParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
+import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
 import { controlPresets, createFogPane } from '../fog/controls'
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -44,7 +44,7 @@ pane
     index: 0,
   })
   .on('change', (ev) => {
-    Object.assign(params, cloneParams({ ...defaultFogParams(), ...presets[ev.value] }))
+    assignParams(params, { ...defaultFogParams(), ...presets[ev.value] })
     bound.refresh()
   })
 
@@ -75,7 +75,7 @@ cam.addBinding(camera, 'pitch', { min: -1.4, max: 1.4, step: 0.01 })
 cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, label: 'resolution' })
 
 pane.addButton({ title: 'Reset' }).on('click', () => {
-  Object.assign(params, defaultFogParams())
+  assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
   pane.refresh()
   bound.refresh()

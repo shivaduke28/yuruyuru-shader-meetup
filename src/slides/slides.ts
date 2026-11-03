@@ -64,14 +64,14 @@ const heightControls = [controlPresets.density, controlPresets.falloff, controlP
 const uniformVariation = (id: string, fog: number, color: [number, number, number]): Slide => ({
   id,
   layout: 'demo',
-  title: 'いつものフォグ',
+  title: '距離フォグ',
   params: { ...uniform, uniformDensity: [fog, fog, fog], fogColor: color },
   controls: uniformControls,
   side: code(`float fog = ${fog};
 vec3 fogColor = vec3(${color.join(', ')});`),
 })
 
-const heightVariation = (id: string, a: number, f: number, h: number): Slide => ({
+const heightVariation = (id: string, a: number, f: number, h: number, body: string): Slide => ({
   id,
   layout: 'demo',
   title: '指数関数高さフォグ',
@@ -80,6 +80,7 @@ const heightVariation = (id: string, a: number, f: number, h: number): Slide => 
   side: code(`float a = ${a};
 float f = ${f};
 float h = ${h};`),
+  body: `<p>${body}</p>`,
 })
 
 export const slides: Slide[] = [
@@ -99,7 +100,7 @@ export const slides: Slide[] = [
   {
     id: 'uniform-fog',
     layout: 'demo',
-    title: 'いつものフォグ',
+    title: '距離フォグ',
     params: uniform,
     controls: uniformControls,
     side: code(`float t = exp(-fog * dist);
@@ -111,7 +112,7 @@ color = mix(fogColor, color, t);`),
   {
     id: 'assumptions',
     layout: 'text',
-    title: 'いつものフォグの前提',
+    title: '距離フォグの前提',
     body: `
       <p>次の仮定のもとでは物理ベースな計算になっている</p>
       <ul>
@@ -130,25 +131,24 @@ color = mix(fogColor, color, t);`),
     side: code('float fog = a * exp(-f * (pos.y - h));'),
     body: `
       <ul>
-        <li>a: 濃さ</li>
-        <li>f: 上に行くとどれくらい薄くなるか</li>
+        <li>a: h での濃さ</li>
+        <li>f: 減衰</li>
         <li>h: 基準の高さ</li>
       </ul>`,
   },
-  heightVariation('height-fog-a', 1.0, 0.5, 0),
-  heightVariation('height-fog-f-small', 0.35, 0.2, 0),
-  heightVariation('height-fog-f-large', 0.35, 1.5, 0),
+  heightVariation('height-fog-a', 1.0, 0.5, 0, 'a を大きくすると全体が濃くなる'),
+  heightVariation('height-fog-f-small', 0.35, 0.25, 0, 'f を小さくすると減衰がゆっくりになり、上の方まで霧が残る'),
+  heightVariation('height-fog-f-large', 0.35, 1.5, 0, 'f を大きくすると減衰が速くなり、床の近くだけに霧が溜まる'),
   {
     id: 'formula',
     layout: 'demo',
-    title: 'こうなる',
+    title: 'シェーダーコード',
     params: plain,
     controls: heightControls,
     side: code(`float fv = f * rayDir.y;
-float fog = a * exp(-f * (camPos.y - h))
-    * (1.0 - exp(-fv * dist)) / fv;
+float i = fv == 0.0 ? dist : (1.0 - exp(-fv * dist)) / fv;
+float fog = a * exp(-f * (camPos.y - h)) * i;
 color = mix(fogColor, color, exp(-fog));`),
-    body: '<p>fv が 0 に近いときは a * exp(-f * (camPos.y - h)) * dist</p>',
   },
   {
     id: 'rgb',

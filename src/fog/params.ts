@@ -52,6 +52,20 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.fogColor, from.fogColor, to.fogColor, t)
 }
 
+/** dst の配列を差し替えずに、src の値を書き込む (配列を参照している UI を壊さない) */
+export const assignParams = (dst: FogParams, src: Partial<FogParams>) => {
+  for (const k of Object.keys(src) as (keyof FogParams)[]) {
+    const v = src[k]
+    if (!v) continue
+    dst[k][0] = v[0]
+    dst[k][1] = v[1]
+    dst[k][2] = v[2]
+  }
+}
+
+export const paramsEqual = (a: FogParams, b: FogParams) =>
+  (Object.keys(a) as (keyof FogParams)[]).every((k) => a[k].every((v, i) => v === b[k][i]))
+
 export type Camera = {
   /** 現在位置。z は毎フレーム speed * dt だけ進む */
   position: Vec3
