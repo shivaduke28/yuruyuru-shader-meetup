@@ -8,12 +8,16 @@ export type FogParams = {
   falloff: Vec3
   /** base height h */
   baseHeight: Vec3
-  /** 高さに依存しない一様フォグの密度 */
+  /** 高さに依存しない一様フォグの消散係数 (1/長さ)。density と同じく「密度」と呼んでいるが実体は κ */
   uniformDensity: Vec3
-  /** 内散乱に使う定数光（フォグ色） */
-  fogColor: Vec3
+  /** 環境光。面のアンビエントにも、フォグの内散乱にも使う */
+  ambient: Vec3
+  /** フォグの散乱アルベド (0..1)。フォグの色 = ambient * albedo + emission */
+  albedo: Vec3
   /** フォグ自体が発する光 */
   emission: Vec3
+  /** 平行光源 (太陽) の色 × 強さ */
+  lightColor: Vec3
 }
 
 export const defaultFogParams = (): FogParams => ({
@@ -21,8 +25,10 @@ export const defaultFogParams = (): FogParams => ({
   falloff: [0.5, 0.5, 0.5],
   baseHeight: [0.0, 0.0, 0.0],
   uniformDensity: [0, 0, 0],
-  fogColor: [0.4, 0.4, 0.4],
+  ambient: [0.4, 0.4, 0.4],
+  albedo: [1, 1, 1],
   emission: [0, 0, 0],
+  lightColor: [1, 1, 1],
 })
 
 export const noFog = (): FogParams => ({
@@ -36,8 +42,10 @@ export const cloneParams = (p: FogParams): FogParams => ({
   falloff: [...p.falloff],
   baseHeight: [...p.baseHeight],
   uniformDensity: [...p.uniformDensity],
-  fogColor: [...p.fogColor],
+  ambient: [...p.ambient],
+  albedo: [...p.albedo],
   emission: [...p.emission],
+  lightColor: [...p.lightColor],
 })
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -53,8 +61,10 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.falloff, from.falloff, to.falloff, t)
   lerpVec(out.baseHeight, from.baseHeight, to.baseHeight, t)
   lerpVec(out.uniformDensity, from.uniformDensity, to.uniformDensity, t)
-  lerpVec(out.fogColor, from.fogColor, to.fogColor, t)
+  lerpVec(out.ambient, from.ambient, to.ambient, t)
+  lerpVec(out.albedo, from.albedo, to.albedo, t)
   lerpVec(out.emission, from.emission, to.emission, t)
+  lerpVec(out.lightColor, from.lightColor, to.lightColor, t)
 }
 
 /** dst の配列を差し替えずに、src の値を書き込む (配列を参照している UI を壊さない) */

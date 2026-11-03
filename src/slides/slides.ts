@@ -24,7 +24,7 @@ export type Slide = {
     density: RandomRange
     falloff: RandomRange
     baseHeight: RandomRange
-    fogColor?: RandomRange
+    albedo?: RandomRange
   }
 }
 
@@ -33,7 +33,8 @@ const plain: Partial<FogParams> = {
   falloff: [0.5, 0.5, 0.5],
   baseHeight: [0, 0, 0],
   uniformDensity: [0, 0, 0],
-  fogColor: [0.4, 0.4, 0.4],
+  ambient: [0.4, 0.4, 0.4],
+  albedo: [1, 1, 1],
   emission: [0, 0, 0],
 }
 
@@ -42,7 +43,8 @@ const rgb: Partial<FogParams> = {
   falloff: [0.35, 0.55, 0.9],
   baseHeight: [0, 1.5, 3],
   uniformDensity: [0, 0, 0],
-  fogColor: [0.4, 0.4, 0.4],
+  ambient: [0.4, 0.4, 0.4],
+  albedo: [1, 1, 1],
   emission: [0, 0, 0],
 }
 
@@ -61,14 +63,14 @@ const none: Partial<FogParams> = {
 const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
-const uniformControls = [controlPresets.uniform, controlPresets.fogColor]
+const uniformControls = [controlPresets.uniform, controlPresets.ambient, controlPresets.albedo]
 const heightControls = [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight]
 
 const uniformVariation = (id: string, fog: number, color: [number, number, number]): Slide => ({
   id,
   layout: 'demo',
   title: '距離フォグ',
-  params: { ...uniform, uniformDensity: [fog, fog, fog], fogColor: color },
+  params: { ...uniform, uniformDensity: [fog, fog, fog], ambient: color },
   controls: uniformControls,
   side: code(`float fog = ${fog};
 vec3 fogColor = vec3(${color.join(', ')});`),
@@ -162,14 +164,14 @@ color = mix(fogColor, color, exp(-fog));`),
       controlPresets.densityRGB,
       controlPresets.falloffRGB,
       controlPresets.baseHeightRGB,
-      controlPresets.fogColor,
+      controlPresets.albedo,
     ],
     randomize: {
       intervalMs: 1000,
       density: { min: 0.1, max: 0.8 },
       falloff: { min: 0.2, max: 1.2 },
       baseHeight: { min: 0, max: 4 },
-      fogColor: { min: 0.1, max: 0.8 },
+      albedo: { min: 0.2, max: 1 },
     },
     body: '<p>float を vec3 にするだけ</p>',
   },
@@ -178,7 +180,7 @@ color = mix(fogColor, color, exp(-fog));`),
     layout: 'demo',
     title: '発光',
     params: { ...rgb, emission: [0.3, 0.15, 0.06] },
-    controls: [controlPresets.fogColor, controlPresets.emission],
+    controls: [controlPresets.ambient, controlPresets.albedo, controlPresets.emission],
     side: code('color = mix(fogColor + emission, color, exp(-fog));'),
     body: '<p>散乱で入ってくる光とは別に、フォグ自体が発する光を足す</p>',
   },

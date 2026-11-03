@@ -15,9 +15,11 @@ export const controlPresets = {
   densityRGB: { key: 'density', mode: 'rgb', label: 'a (density)', min: 0, max: 1.5, step: 0.001 },
   falloffRGB: { key: 'falloff', mode: 'rgb', label: 'f (falloff)', min: 0.01, max: 2, step: 0.001 },
   baseHeightRGB: { key: 'baseHeight', mode: 'rgb', label: 'h (height)', min: -5, max: 15, step: 0.01 },
-  uniformRGB: { key: 'uniformDensity', mode: 'rgb', label: 'uniform', min: 0, max: 0.1, step: 0.0005 },
-  fogColor: { key: 'fogColor', mode: 'color', label: 'fog color' },
+  uniformRGB: { key: 'uniformDensity', mode: 'rgb', label: 'uniform extinction', min: 0, max: 0.2, step: 0.0005 },
+  ambient: { key: 'ambient', mode: 'color', label: 'ambient' },
+  albedo: { key: 'albedo', mode: 'color', label: 'albedo' },
   emission: { key: 'emission', mode: 'color', label: 'emission' },
+  lightColor: { key: 'lightColor', mode: 'color', label: 'light color' },
 } satisfies Record<string, ControlSpec>
 
 // refresh() は値が変わっていると change を同期で投げるので、その間はユーザー操作として扱わない
@@ -98,6 +100,8 @@ export type BoundPane = {
   pane: Pane
   /** target 側が外から変わったときに UI を同期する */
   refresh(): void
+  /** フォルダなどに後からコントロールを足す。refresh の対象にも入る */
+  addControls(folder: FolderApi | Pane, specs: ControlSpec[]): void
 }
 
 export const createFogPane = (
@@ -111,13 +115,20 @@ export const createFogPane = (
   onUserChange: () => void = () => {},
 ): BoundPane => {
   const pane = new Pane({ container, title, expanded: true })
-  const refreshers = specs.map((spec) =>
-    spec.mode === 'color'
-      ? bindColor(pane, display[spec.key], target[spec.key], spec.label, onUserChange)
-      : bindVec3(pane, display[spec.key], target[spec.key], spec, onUserChange),
-  )
+  const refreshers: (() => void)[] = []
+  const addControls = (folder: FolderApi | Pane, specs: ControlSpec[]) => {
+    for (const spec of specs) {
+      refreshers.push(
+        spec.mode === 'color'
+          ? bindColor(folder, display[spec.key], target[spec.key], spec.label, onUserChange)
+          : bindVec3(folder, display[spec.key], target[spec.key], spec, onUserChange),
+      )
+    }
+  }
+  addControls(pane, specs)
   return {
     pane,
     refresh: () => refreshers.forEach((r) => r()),
+    addControls,
   }
 }

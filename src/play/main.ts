@@ -12,14 +12,41 @@ const camera = defaultCamera()
 const renderer = createFogRenderer(canvas, params, camera)
 renderer.start()
 
-const presets: Record<string, Partial<FogParams>> = {
-  plain: defaultFogParams(),
+type Preset = { params: Partial<FogParams>; lightAttenuation?: boolean }
+
+const presets: Record<string, Preset> = {
+  plain: { params: defaultFogParams() },
   rgb: {
-    density: [0.25, 0.35, 0.55],
-    falloff: [0.35, 0.55, 0.9],
-    baseHeight: [0, 1.5, 3],
+    params: {
+      density: [0.25, 0.35, 0.55],
+      falloff: [0.35, 0.55, 0.9],
+      baseHeight: [0, 1.5, 3],
+    },
   },
-  uniform: { density: [0, 0, 0], uniformDensity: [0.02, 0.02, 0.02] },
+  uniform: { params: { density: [0, 0, 0], uniformDensity: [0.02, 0.02, 0.02] } },
+  // 水: 赤から順に吸われ、散乱は青寄り、環境光は暗めの青
+  water: {
+    params: {
+      density: [0, 0, 0],
+      uniformDensity: [0.08, 0.04, 0.02],
+      albedo: [0.1, 0.4, 0.7],
+      ambient: [0.2, 0.3, 0.45],
+    },
+  },
+  // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽は層の中で減衰、層の奥がうっすら光る
+  gas: {
+    params: {
+      density: [1.5, 1.5, 1.5],
+      falloff: [0.7, 0.7, 0.7],
+      baseHeight: [0, 0, 0],
+      uniformDensity: [0, 0, 0],
+      albedo: [0.55, 0.8, 0.3],
+      ambient: [0.3, 0.33, 0.3],
+      lightColor: [1.0, 0.9, 0.75],
+      emission: [0.0, 0.04, 0.0],
+    },
+    lightAttenuation: true,
+  },
 }
 
 const bound = createFogPane(
@@ -30,7 +57,7 @@ const bound = createFogPane(
     controlPresets.falloffRGB,
     controlPresets.baseHeightRGB,
     controlPresets.uniformRGB,
-    controlPresets.fogColor,
+    controlPresets.albedo,
     controlPresets.emission,
   ],
   'Height Fog',
@@ -45,9 +72,18 @@ pane
     index: 0,
   })
   .on('change', (ev) => {
-    assignParams(params, { ...defaultFogParams(), ...presets[ev.value] })
+    const preset = presets[ev.value]
+    assignParams(params, { ...defaultFogParams(), ...preset.params })
+    renderer.lightAttenuation = preset.lightAttenuation ?? false
     bound.refresh()
+    pane.refresh()
   })
+
+pane.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
+
+const light = pane.addFolder({ title: 'Light', expanded: true })
+bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
+light.addBinding(renderer, 'lightAttenuation', { label: 'height fog attenuation' })
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるので表示を定期的に追従させる
@@ -78,6 +114,7 @@ cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, lab
 pane.addButton({ title: 'Reset' }).on('click', () => {
   assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
+  renderer.lightAttenuation = false
   pane.refresh()
   bound.refresh()
 })

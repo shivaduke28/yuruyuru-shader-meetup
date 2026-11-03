@@ -13,8 +13,12 @@ uniform vec3 u_density;        // a
 uniform vec3 u_falloff;        // f
 uniform vec3 u_baseHeight;     // h
 uniform vec3 u_uniformDensity; // 高さに依存しない成分
-uniform vec3 u_fogColor;       // 内散乱に使う定数光
+uniform vec3 u_ambient;        // 環境光。面のアンビエントとフォグの内散乱に使う
+uniform vec3 u_albedo;         // フォグの散乱アルベド
 uniform vec3 u_emission;       // フォグ自体が発する光
+uniform bool u_colorful;       // 柱の色をセルごとにランダムな色相にする
+uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
+uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -68,12 +72,20 @@ vec2 cellCenterOf(vec2 xz) {
   return floor(xz / CELL + 0.5) * CELL;
 }
 
-// セル内だけを見た SDF: 床 + そのセルの柱
-float mapCell(vec3 p, vec2 cellCenter) {
+float pillarSdf(vec3 p, vec2 cellCenter) {
   float h = pillarHeight(cellCenter);
   vec2 q = p.xz - cellCenter;
-  float pillar = sdBox(vec3(q.x, p.y - h * 0.5, q.y), vec3(PILLAR_HALF_WIDTH, h * 0.5, PILLAR_HALF_WIDTH));
-  return min(p.y, pillar);
+  return sdBox(vec3(q.x, p.y - h * 0.5, q.y), vec3(PILLAR_HALF_WIDTH, h * 0.5, PILLAR_HALF_WIDTH));
+}
+
+// セル内だけを見た SDF: 床 + そのセルの柱
+float mapCell(vec3 p, vec2 cellCenter) {
+  return min(p.y, pillarSdf(p, cellCenter));
+}
+
+// 当たった点が床か柱か。当たり判定は距離に比例して甘いので p.y では決めず、SDF のどちらが近いかで決める
+bool isFloor(vec3 p) {
+  return p.y <= pillarSdf(p, cellCenterOf(p.xz));
 }
 
 float mapScene(vec3 p) {
@@ -117,11 +129,31 @@ float shadow(vec3 ro, vec3 rd) {
   return raymarch(ro, rd, 40.0, 0.02) > 0.0 ? 0.0 : 1.0;
 }
 
+vec3 hsv2rgb(vec3 c) {
+  vec3 k = fract(c.x + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0;
+  return c.z * mix(vec3(1.0), clamp(abs(k) - 1.0, 0.0, 1.0), c.y);
+}
+
+vec3 surfaceAlbedo(vec3 p) {
+  // 床は常にグレー。柱は u_colorful のときセルごとの色相
+  if (!u_colorful || isFloor(p)) return vec3(0.8);
+  float hue = hash21(cellCenterOf(p.xz) / CELL + 3.0);
+  return hsv2rgb(vec3(hue, 0.6, 0.8));
+}
+
+// 点 p から太陽方向への高さフォグの透過率。太陽は無限遠なので d = ∞ の閉じた式になる
+// (LIGHT_DIR.y > 0 なら光学的深さは有限)。一様フォグ成分は無限遠まで積もるので無視する
+vec3 sunTransmittance(vec3 p) {
+  if (!u_lightAttenuation) return vec3(1.0);
+  vec3 tau = heightFogOpticalDepth(p, LIGHT_DIR, 1e5, u_density, u_falloff, u_baseHeight);
+  return exp(-min(tau, vec3(60.0)));
+}
+
 vec3 shade(vec3 p, vec3 n) {
   float diff = max(dot(n, LIGHT_DIR), 0.0);
   float sh = shadow(p + n * 0.02, LIGHT_DIR);
-  // アンビエント光 = フォグを照らしている一定の光なので u_fogColor をそのまま使う
-  return vec3(0.8) * (diff * sh + u_fogColor);
+  vec3 sun = u_lightColor * sunTransmittance(p);
+  return surfaceAlbedo(p) * (diff * sh * sun + u_ambient);
 }
 
 void main() {
@@ -137,13 +169,14 @@ void main() {
     col = shade(p, calcNormal(p));
     d = hit;
   } else {
-    col = vec3(0.0);
+    col = u_ambient; // 空 = 環境光 (どの方向から来る光も同じという前提)
     d = 1e5; // 無限遠扱い。rd.y <= 0 なら tau は発散して T -> 0
   }
 
   vec3 T = fogTransmittance(ro, rd, d);
-  // 散乱で入ってくる光 (fogColor) に、フォグ自体が発する光 (emission) を足す。面のアンビエントには足さない
-  col = mix(u_fogColor + u_emission, col, T);
+  // フォグの色 = 環境光 × 散乱アルベド + 発光 (Pickles と同じ形)
+  vec3 fogColor = u_ambient * u_albedo + u_emission;
+  col = mix(fogColor, col, T);
 
   col = pow(col, vec3(1.0 / 2.2));
   fragColor = vec4(col, 1.0);

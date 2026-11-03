@@ -23,8 +23,12 @@ const uniformNames = [
   'u_falloff',
   'u_baseHeight',
   'u_uniformDensity',
-  'u_fogColor',
+  'u_ambient',
+  'u_albedo',
   'u_emission',
+  'u_colorful',
+  'u_lightColor',
+  'u_lightAttenuation',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -34,6 +38,10 @@ export type FogRenderer = {
   camera: Camera
   /** 描画解像度の倍率 (1 = CSS ピクセル × devicePixelRatio) */
   resolutionScale: number
+  /** 柱の色をセルごとにランダムな色相にする */
+  colorful: boolean
+  /** 平行光源を高さフォグで減衰させる */
+  lightAttenuation: boolean
   start(): void
   stop(): void
   dispose(): void
@@ -127,8 +135,12 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_falloff, params.falloff)
     gl.uniform3fv(loc.u_baseHeight, params.baseHeight)
     gl.uniform3fv(loc.u_uniformDensity, params.uniformDensity)
-    gl.uniform3fv(loc.u_fogColor, params.fogColor)
+    gl.uniform3fv(loc.u_ambient, params.ambient)
+    gl.uniform3fv(loc.u_albedo, params.albedo)
     gl.uniform3fv(loc.u_emission, params.emission)
+    gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
+    gl.uniform3fv(loc.u_lightColor, params.lightColor)
+    gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }
@@ -170,6 +182,8 @@ export const createFogRenderer = (
     params,
     camera,
     resolutionScale: 1,
+    colorful: false,
+    lightAttenuation: false,
     start() {
       if (running) return
       running = true
