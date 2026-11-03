@@ -1,11 +1,11 @@
 import { Pane, type FolderApi } from 'tweakpane'
 import type { FogParams, Vec3 } from './params'
 
-export type Vec3Key = Exclude<keyof FogParams, 'fogColor'>
+export type Vec3Key = keyof FogParams
 
 export type ControlSpec =
   | { key: Vec3Key; mode: 'scalar' | 'rgb'; label: string; min: number; max: number; step?: number }
-  | { key: 'fogColor'; mode: 'color'; label: string }
+  | { key: Vec3Key; mode: 'color'; label: string }
 
 export const controlPresets = {
   uniform: { key: 'uniformDensity', mode: 'scalar', label: 'fog', min: 0, max: 0.1, step: 0.0005 },
@@ -79,7 +79,7 @@ export const createFogPane = (
   const pane = new Pane({ container, title, expanded: true })
   const refreshers = specs.map((spec) =>
     spec.mode === 'color'
-      ? bindColor(pane, target.fogColor, spec.label)
+      ? bindColor(pane, target[spec.key], spec.label)
       : bindVec3(pane, target[spec.key], spec),
   )
   return {

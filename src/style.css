@@ -1,9 +1,9 @@
 :root {
+  --bg: #1f1f23;
   --fg: #f4f1ec;
-  --fg-dim: #c9c3b8;
-  --panel: rgba(18, 18, 22, 0.72);
+  --fg-dim: #b9b3a8;
   --accent: #ffcf5c;
-  --code-bg: rgba(0, 0, 0, 0.45);
+  --code-bg: #0d1117;
   font-family: 'Hiragino Sans', 'Noto Sans JP', system-ui, sans-serif;
   color: var(--fg);
 }
@@ -17,10 +17,160 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #111;
+  background: var(--bg);
 }
 
-#canvas {
+/* ---------------- slides ----------------
+ * ステージは 1920 × 1080 の固定キャンバス。px で設計し、ウィンドウに合わせて
+ * ステージ全体を JS で一様に拡大縮小する (zoom)。
+ *
+ * 枠は 5 つ (見出し / デモ / 右カラム / 本文 / ページ番号) で、位置と大きさは固定。
+ * 右カラムと本文の中身は .fit で「基準サイズで描き、枠からはみ出すなら入るまで一様に縮小」する。
+ * なので中身の量に応じた予算計算はしない。
+ */
+
+body.slides {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  padding: 48px 96px 58px;
+}
+
+.title {
+  flex: none;
+  margin: 0;
+  font-size: 86px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.content {
+  flex: none;
+  height: 465px; /* カラム幅 (1920 - 96 × 2 - 76) / 2 = 826px の 16:9 */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 76px;
+}
+
+.demo {
+  height: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+}
+
+.demo #canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.side {
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#side-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  font-size: 42px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.body p,
+.body ul {
+  margin: 0;
+}
+
+.body ul {
+  padding-left: 1.2em;
+}
+
+.footer {
+  position: absolute;
+  left: 96px;
+  bottom: 18px;
+  color: var(--fg-dim);
+  font-size: 22px;
+  line-height: 1;
+  user-select: none;
+}
+
+/* 文字ページ: コンテンツ行を消して、本文を残りの高さの中で縦中央に置く */
+.stage.layout-text .content {
+  display: none;
+}
+
+.stage.layout-text .body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 58px;
+}
+
+.stage.layout-text .body ul li {
+  margin: 12px 0;
+}
+
+pre {
+  margin: 0;
+  background: var(--code-bg);
+  border-radius: 12px;
+  padding: 18px 30px;
+  font-size: 29px;
+  line-height: 1.5;
+  white-space: pre; /* 折り返さない。長い行は .fit の縮小で収める */
+  width: max-content;
+  max-width: none;
+}
+
+code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+}
+
+pre code.hljs {
+  background: transparent;
+  padding: 0;
+}
+
+a {
+  color: var(--accent);
+}
+
+.pane {
+  zoom: 1.4;
+  --tp-blade-value-width: 240px;
+}
+
+/* 空の要素が flex の隙間ぶん場所を取らないように消す */
+.pane:empty,
+#side-content:empty {
+  display: none;
+}
+
+/* ---------------- playground ---------------- */
+
+.play #canvas {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -29,181 +179,32 @@ body {
   touch-action: none;
 }
 
-.slide {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  padding: 6vh 7vw;
-  pointer-events: none;
-  transition: opacity 0.25s ease;
-}
-
-.slide.hidden {
-  opacity: 0;
-}
-
-.slide > * {
-  pointer-events: auto;
-}
-
-.slide .panel {
-  background: var(--panel);
-  backdrop-filter: blur(6px);
-  border-radius: 14px;
-  padding: 2.4rem 3rem;
-  max-width: min(62rem, 80vw);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
-}
-
-.slide.layout-center {
-  align-items: center;
-  text-align: center;
-}
-
-.slide.layout-bottom {
-  justify-content: flex-end;
-}
-
-.slide.layout-bottom .panel {
-  max-width: min(70rem, 86vw);
-}
-
-.slide h1 {
-  font-size: clamp(2.2rem, 5vw, 4rem);
-  margin: 0 0 0.6rem;
-  letter-spacing: 0.02em;
-}
-
-.slide h2 {
-  font-size: clamp(1.6rem, 3.4vw, 2.6rem);
-  margin: 0 0 1rem;
-  color: var(--accent);
-}
-
-.slide p,
-.slide li {
-  font-size: clamp(1.05rem, 1.9vw, 1.5rem);
-  line-height: 1.6;
-}
-
-.slide ul {
-  margin: 0.4rem 0;
-  padding-left: 1.4em;
-}
-
-.slide .sub {
-  color: var(--fg-dim);
-  font-size: clamp(0.95rem, 1.5vw, 1.2rem);
-}
-
-.slide .math {
-  margin: 0.8rem 0;
-  font-size: clamp(1.1rem, 2.2vw, 1.7rem);
-}
-
-.slide .note {
-  color: var(--fg-dim);
-  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
-}
-
-.slide pre {
-  background: var(--code-bg);
-  border-radius: 8px;
-  padding: 0.9rem 1.2rem;
-  font-size: clamp(0.85rem, 1.5vw, 1.15rem);
-  line-height: 1.5;
-  overflow-x: auto;
-  margin: 0.8rem 0;
-}
-
-.slide code {
-  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-}
-
-.slide a {
-  color: var(--accent);
-}
-
-.slide .kbd {
-  display: inline-block;
-  border: 1px solid var(--fg-dim);
-  border-radius: 4px;
-  padding: 0 0.4em;
-  font-size: 0.9em;
-  margin: 0 0.1em;
-}
-
-.pane {
+.play .pane {
   position: fixed;
   right: 16px;
   top: 16px;
   width: 300px;
   z-index: 10;
+  zoom: 1;
 }
 
-.pane:empty {
-  display: none;
-}
-
-.footer {
-  position: fixed;
-  left: 16px;
-  bottom: 12px;
-  color: var(--fg-dim);
-  font-size: 0.9rem;
-  opacity: 0.8;
-  user-select: none;
-}
-
-.info {
+.play .info {
   position: fixed;
   left: 16px;
   top: 16px;
-  background: var(--panel);
+  background: rgba(18, 18, 22, 0.72);
   backdrop-filter: blur(6px);
   border-radius: 10px;
   padding: 0.8rem 1.1rem;
-  max-width: 28rem;
 }
 
-.info h1 {
+.play .info h1 {
   font-size: 1.2rem;
   margin: 0 0 0.3rem;
 }
 
-.info p {
+.play .info p {
   margin: 0.2rem 0;
   font-size: 0.9rem;
   color: var(--fg-dim);
-}
-
-.info a {
-  color: var(--accent);
-}
-
-.info .math {
-  color: var(--fg);
-  margin: 0.5rem 0;
-}
-
-@media (max-width: 720px) {
-  .slide {
-    padding: 3vh 16px;
-  }
-  .slide .panel {
-    padding: 1.2rem 1.4rem;
-    max-width: calc(100vw - 32px);
-  }
-  .pane {
-    width: calc(100vw - 32px);
-    right: 16px;
-  }
-}
-
-.slide pre code.hljs {
-  background: transparent;
-  padding: 0;
 }

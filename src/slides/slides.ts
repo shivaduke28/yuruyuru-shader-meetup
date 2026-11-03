@@ -9,8 +9,13 @@ export type RandomRange = { min: number; max: number }
 
 export type Slide = {
   id: string
-  layout?: 'left' | 'center' | 'bottom'
-  html: string
+  /** demo: 左にデモ、右にコードとスライダー。text: 見出しと本文だけ */
+  layout: 'demo' | 'text'
+  title: string
+  /** 右カラム（コードなど） */
+  side?: string
+  /** 下の本文 */
+  body?: string
   params?: Partial<FogParams>
   controls?: ControlSpec[]
   /** 指定すると intervalMs ごとに各チャンネルの値をランダムに選び直す */
@@ -53,208 +58,136 @@ const none: Partial<FogParams> = {
 const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
+const uniformControls = [controlPresets.uniform, controlPresets.fogColor]
+const heightControls = [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight]
+
+const uniformVariation = (id: string, fog: number, color: [number, number, number]): Slide => ({
+  id,
+  layout: 'demo',
+  title: 'いつものフォグ',
+  params: { ...uniform, uniformDensity: [fog, fog, fog], fogColor: color },
+  controls: uniformControls,
+  side: code(`float fog = ${fog};
+vec3 fogColor = vec3(${color.join(', ')});`),
+})
+
+const heightVariation = (id: string, a: number, f: number, h: number): Slide => ({
+  id,
+  layout: 'demo',
+  title: '指数関数高さフォグ',
+  params: { ...plain, density: [a, a, a], falloff: [f, f, f], baseHeight: [h, h, h] },
+  controls: heightControls,
+  side: code(`float a = ${a};
+float f = ${f};
+float h = ${h};`),
+})
+
 export const slides: Slide[] = [
   {
     id: 'title',
-    layout: 'center',
+    layout: 'text',
+    title: '指数関数高さフォグ',
+    body: '<p>shivaduke / ゆるゆるシェーダー交流会 #2</p>',
     params: rgb,
-    html: `
-      <div class="panel">
-        <h1>指数関数高さフォグ</h1>
-        <p class="sub">shivaduke / ゆるゆるシェーダー交流会 #2</p>
-      </div>`,
   },
   {
     id: 'no-fog',
-    layout: 'bottom',
+    layout: 'demo',
+    title: 'フォグなし',
     params: none,
-    html: `
-      <div class="panel">
-        <h2>フォグなし</h2>
-      </div>`,
   },
   {
     id: 'uniform-fog',
-    layout: 'bottom',
+    layout: 'demo',
+    title: 'いつものフォグ',
     params: uniform,
-    controls: [controlPresets.uniform, controlPresets.fogColor],
-    html: `
-      <div class="panel">
-        <h2>いつものフォグ</h2>
-        ${code('color = mix(fogColor, color, exp(-fog * distance));')}
-      </div>`,
+    controls: uniformControls,
+    side: code(`float t = exp(-fog * dist);
+color = mix(fogColor, color, t);`),
   },
-  {
-    id: 'uniform-fog-thin',
-    layout: 'bottom',
-    params: { ...uniform, uniformDensity: [0.005, 0.005, 0.005] },
-    controls: [controlPresets.uniform, controlPresets.fogColor],
-    html: `
-      <div class="panel">
-        <h2>いつものフォグ</h2>
-        ${code(`float fog = 0.005;
-vec3 fogColor = vec3(0.4, 0.4, 0.4);`)}
-      </div>`,
-  },
-  {
-    id: 'uniform-fog-thick',
-    layout: 'bottom',
-    params: { ...uniform, uniformDensity: [0.05, 0.05, 0.05] },
-    controls: [controlPresets.uniform, controlPresets.fogColor],
-    html: `
-      <div class="panel">
-        <h2>いつものフォグ</h2>
-        ${code(`float fog = 0.05;
-vec3 fogColor = vec3(0.4, 0.4, 0.4);`)}
-      </div>`,
-  },
-  {
-    id: 'uniform-fog-color',
-    layout: 'bottom',
-    params: { ...uniform, uniformDensity: [0.02, 0.02, 0.02], fogColor: [0.1, 0.1, 0.15] },
-    controls: [controlPresets.uniform, controlPresets.fogColor],
-    html: `
-      <div class="panel">
-        <h2>いつものフォグ</h2>
-        ${code(`float fog = 0.02;
-vec3 fogColor = vec3(0.1, 0.1, 0.15);`)}
-      </div>`,
-  },
+  uniformVariation('uniform-fog-thin', 0.005, [0.4, 0.4, 0.4]),
+  uniformVariation('uniform-fog-thick', 0.05, [0.4, 0.4, 0.4]),
+  uniformVariation('uniform-fog-color', 0.02, [0.1, 0.1, 0.15]),
   {
     id: 'assumptions',
-    layout: 'bottom',
+    layout: 'text',
+    title: 'いつものフォグの前提',
+    body: `
+      <p>次の仮定のもとでは物理ベースな計算になっている</p>
+      <ul>
+        <li>フォグの濃さがどこでも同じ</li>
+        <li>フォグを照らす光がどこでも同じ</li>
+        <li>光がどの方向にも同じように散る</li>
+      </ul>`,
     params: uniform,
-    controls: [controlPresets.uniform],
-    html: `
-      <div class="panel">
-        <h2>いつものフォグの前提</h2>
-        <p>いつものフォグは、次の仮定のもとでは物理ベースな計算になっている</p>
-        <ul>
-          <li>フォグの濃さがどこでも同じ</li>
-          <li>フォグを照らす光がどこでも同じ</li>
-          <li>光がどの方向にも同じように散る</li>
-        </ul>
-      </div>`,
   },
   {
     id: 'height-fog',
-    layout: 'bottom',
+    layout: 'demo',
+    title: '指数関数高さフォグ',
     params: plain,
-    controls: [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-    html: `
-      <div class="panel">
-        <h2>指数関数高さフォグ</h2>
-        <p>フォグの濃さを高さで変える</p>
-        ${code('float fog = a * exp(-f * (pos.y - h));')}
-        <ul>
-          <li>a: 濃さ</li>
-          <li>f: 上に行くとどれくらい薄くなるか</li>
-          <li>h: 基準の高さ</li>
-        </ul>
-      </div>`,
+    controls: heightControls,
+    side: code('float fog = a * exp(-f * (pos.y - h));'),
+    body: `
+      <ul>
+        <li>a: 濃さ</li>
+        <li>f: 上に行くとどれくらい薄くなるか</li>
+        <li>h: 基準の高さ</li>
+      </ul>`,
   },
-  {
-    id: 'height-fog-a',
-    layout: 'bottom',
-    params: { ...plain, density: [1.0, 1.0, 1.0], falloff: [0.5, 0.5, 0.5], baseHeight: [0.0, 0.0, 0.0] },
-    controls: [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-    html: `
-      <div class="panel">
-        <h2>指数関数高さフォグ</h2>
-        ${code(`float a = 1.0;
-float f = 0.5;
-float h = 0.0;`)}
-      </div>`,
-  },
-  {
-    id: 'height-fog-f-small',
-    layout: 'bottom',
-    params: { ...plain, density: [0.35, 0.35, 0.35], falloff: [0.2, 0.2, 0.2], baseHeight: [0.0, 0.0, 0.0] },
-    controls: [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-    html: `
-      <div class="panel">
-        <h2>指数関数高さフォグ</h2>
-        ${code(`float a = 0.35;
-float f = 0.2;
-float h = 0.0;`)}
-      </div>`,
-  },
-  {
-    id: 'height-fog-f-large',
-    layout: 'bottom',
-    params: { ...plain, density: [0.35, 0.35, 0.35], falloff: [1.5, 1.5, 1.5], baseHeight: [0.0, 0.0, 0.0] },
-    controls: [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-    html: `
-      <div class="panel">
-        <h2>指数関数高さフォグ</h2>
-        ${code(`float a = 0.35;
-float f = 1.5;
-float h = 0.0;`)}
-      </div>`,
-  },
+  heightVariation('height-fog-a', 1.0, 0.5, 0),
+  heightVariation('height-fog-f-small', 0.35, 0.2, 0),
+  heightVariation('height-fog-f-large', 0.35, 1.5, 0),
   {
     id: 'formula',
-    layout: 'bottom',
+    layout: 'demo',
+    title: 'こうなる',
     params: plain,
-    controls: [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-    html: `
-      <div class="panel">
-        <h2>こうなる</h2>
-        ${code(`float fv = f * rayDir.y;
-float fog = a * exp(-f * (cameraPos.y - h)) * (1.0 - exp(-fv * distance)) / fv;
-color = mix(fogColor, color, exp(-fog));`)}
-        <p class="note">fv が 0 に近いときは a * exp(-f * (cameraPos.y - h)) * distance</p>
-      </div>`,
+    controls: heightControls,
+    side: code(`float fv = f * rayDir.y;
+float fog = a * exp(-f * (camPos.y - h))
+    * (1.0 - exp(-fv * dist)) / fv;
+color = mix(fogColor, color, exp(-fog));`),
+    body: '<p>fv が 0 に近いときは a * exp(-f * (camPos.y - h)) * dist</p>',
   },
   {
     id: 'rgb',
-    layout: 'bottom',
+    layout: 'demo',
+    title: 'a, f, h を RGB ごとに変える',
     params: rgb,
+    // 右カラムの予算 (3 フォルダまで) に収めるため fog color は出さない
+    controls: [controlPresets.densityRGB, controlPresets.falloffRGB, controlPresets.baseHeightRGB],
     randomize: {
       intervalMs: 1000,
       density: { min: 0.1, max: 0.8 },
       falloff: { min: 0.2, max: 1.2 },
       baseHeight: { min: 0, max: 4 },
     },
-    controls: [
-      controlPresets.densityRGB,
-      controlPresets.falloffRGB,
-      controlPresets.baseHeightRGB,
-      controlPresets.fogColor,
-    ],
-    html: `
-      <div class="panel">
-        <h2>a, f, h を RGB ごとに変える</h2>
-        <p>float を vec3 にするだけ</p>
-      </div>`,
+    body: '<p>float を vec3 にするだけ</p>',
   },
   {
     id: 'extras',
-    layout: 'bottom',
+    layout: 'text',
+    title: 'その先',
+    body: `
+      <ul>
+        <li>ノイズを乗せる</li>
+        <li>点光源の散乱</li>
+        <li>位相関数</li>
+      </ul>`,
     params: rgb,
-    html: `
-      <div class="panel">
-        <h2>その先</h2>
-        <ul>
-          <li>ノイズを乗せる</li>
-          <li>点光源の散乱</li>
-          <li>位相関数</li>
-        </ul>
-      </div>`,
   },
   {
     id: 'end',
-    layout: 'center',
+    layout: 'text',
+    title: 'おわり',
+    body: `
+      <p><a href="./play.html">Playground</a></p>
+      <p>
+        <a href="https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/" target="_blank" rel="noreferrer">ブログ</a> ·
+        <a href="https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8" target="_blank" rel="noreferrer">Pickles Note</a> ·
+        <a href="https://github.com/shivaduke28/yuruyuru-shader-meetup" target="_blank" rel="noreferrer">ソース</a>
+      </p>`,
     params: rgb,
-    html: `
-      <div class="panel">
-        <h2>おわり</h2>
-        <p class="sub">
-          <a href="./play.html">Playground</a><br />
-          <a href="https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/" target="_blank" rel="noreferrer">ブログ</a> ·
-          <a href="https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8" target="_blank" rel="noreferrer">Pickles Note</a> ·
-          <a href="https://github.com/shivaduke28/yuruyuru-shader-meetup" target="_blank" rel="noreferrer">ソース</a>
-        </p>
-      </div>`,
   },
 ]

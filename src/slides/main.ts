@@ -6,7 +6,11 @@ import { createFogPane, type BoundPane } from '../fog/controls'
 import { slides } from './slides'
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
-const slideEl = document.getElementById('slide') as HTMLElement
+const stageEl = document.getElementById('stage') as HTMLElement
+const titleEl = document.getElementById('title') as HTMLElement
+const sideEl = document.getElementById('side-content') as HTMLElement
+const sideInnerEl = document.getElementById('side-inner') as HTMLElement
+const bodyEl = document.getElementById('body-inner') as HTMLElement
 const paneEl = document.getElementById('pane') as HTMLElement
 const footerEl = document.getElementById('footer') as HTMLElement
 
@@ -21,6 +25,27 @@ let pane: BoundPane | null = null
 let index = -1
 let randomTimer = 0
 
+// ステージは 1920 × 1080 で設計し、ウィンドウに収まるよう全体を一様に拡大縮小する
+const fitStage = () => {
+  stageEl.style.zoom = String(Math.min(window.innerWidth / 1920, window.innerHeight / 1080))
+}
+window.addEventListener('resize', fitStage)
+fitStage()
+
+// 中身を枠に合わせる: 基準サイズで測り、はみ出すなら入るまで一様に縮小する
+const fitToBox = (inner: HTMLElement) => {
+  const box = inner.parentElement!
+  inner.style.zoom = '1'
+  const z = Math.min(1, box.clientWidth / inner.scrollWidth, box.clientHeight / inner.scrollHeight)
+  inner.style.zoom = String(Number.isFinite(z) && z > 0 ? z : 1)
+}
+const fitAll = () => {
+  fitToBox(sideInnerEl)
+  fitToBox(bodyEl)
+}
+// フォントの読み込みで文字幅が変わるので、読み込み後にもう一度合わせる
+void document.fonts.ready.then(fitAll)
+
 const rand = (r: { min: number; max: number }) => r.min + Math.random() * (r.max - r.min)
 
 const readHash = () => {
@@ -34,8 +59,10 @@ const show = (i: number) => {
   const slide = slides[i]
   history.replaceState(null, '', `#${i + 1}`)
 
-  slideEl.innerHTML = slide.html
-  slideEl.className = `slide layout-${slide.layout ?? 'left'}`
+  stageEl.className = `stage layout-${slide.layout}`
+  titleEl.textContent = slide.title
+  sideEl.innerHTML = slide.side ?? ''
+  bodyEl.innerHTML = slide.body ?? ''
   footerEl.textContent = `${i + 1} / ${slides.length}`
 
   if (slide.params) {
@@ -48,6 +75,8 @@ const show = (i: number) => {
   if (slide.controls?.length) {
     pane = createFogPane(paneEl, target, slide.controls)
   }
+
+  fitAll()
 
   clearInterval(randomTimer)
   const r = slide.randomize
@@ -87,10 +116,6 @@ window.addEventListener(
         break
       case 'End':
         show(slides.length - 1)
-        break
-      case 'h':
-      case 'H':
-        slideEl.classList.toggle('hidden')
         break
       case 'f':
       case 'F':

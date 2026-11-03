@@ -3,13 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>指数関数高さフォグで遊ぶ</title>
+    <title>指数関数高さフォグ</title>
   </head>
-  <body>
-    <canvas id="canvas"></canvas>
-    <main id="slide" class="slide"></main>
-    <div id="pane" class="pane"></div>
-    <footer id="footer" class="footer"></footer>
+  <body class="slides">
+    <main id="stage" class="stage">
+      <h1 id="title" class="title"></h1>
+      <div class="content">
+        <div class="demo"><canvas id="canvas"></canvas></div>
+        <aside class="side">
+          <div id="side-inner" class="fit">
+            <div id="side-content"></div>
+            <div id="pane" class="pane"></div>
+          </div>
+        </aside>
+      </div>
+      <section class="body">
+        <div id="body-inner" class="fit"></div>
+      </section>
+      <footer id="footer" class="footer"></footer>
+    </main>
     <script type="module" src="/src/slides/main.ts"></script>
   </body>
 </html>
