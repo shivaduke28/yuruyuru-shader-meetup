@@ -86,8 +86,8 @@ bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
 light.addBinding(renderer, 'lightAttenuation', { label: 'height fog attenuation' })
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
-// position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるので表示を定期的に追従させる
-const pos = { x: camera.position[0], y: camera.position[1], z: camera.position[2] }
+// position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
+const pos = { x: camera.position[0], y: camera.position[1] }
 const posBindings = [
   cam.addBinding(pos, 'x', { min: -20, max: 20, step: 0.1 }).on('change', (ev) => {
     camera.position[0] = ev.value
@@ -95,14 +95,11 @@ const posBindings = [
   cam.addBinding(pos, 'y', { min: 0.5, max: 40, step: 0.1 }).on('change', (ev) => {
     camera.position[1] = ev.value
   }),
-  cam.addBinding(pos, 'z', { step: 0.1 }).on('change', (ev) => {
-    camera.position[2] = ev.value
-  }),
 ]
+// y はホイールでも変わるので表示を追従させる
 window.setInterval(() => {
   pos.x = camera.position[0]
   pos.y = camera.position[1]
-  pos.z = camera.position[2]
   posBindings.forEach((b) => b.refresh())
 }, 250)
 cam.addBinding(camera, 'speed', { min: 0, max: 20, step: 0.1 })

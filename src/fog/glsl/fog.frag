@@ -50,6 +50,9 @@ vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
 // セルごとの SDF をグリッドトラバーサルで進める (参考: https://scrapbox.io/0b5vr/Shader:_Grid_Traversal)
 // ---------------------------------------------------------------------------
 const float CELL = 7.0;
+// 柱の並びは PERIOD_CELLS セルで繰り返す。カメラ座標を CELL * PERIOD_CELLS で巻き戻しても絵が続くようにして、
+// 座標が大きくなって float の精度が落ちるのを防ぐ (renderer.ts の WORLD_PERIOD と一致させる)
+const float PERIOD_CELLS = 64.0;
 const float PILLAR_HALF_WIDTH = 0.7;
 const float FAR = 600.0;
 
@@ -64,8 +67,12 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
+vec2 cellId(vec2 cellCenter) {
+  return mod(cellCenter / CELL, PERIOD_CELLS);
+}
+
 float pillarHeight(vec2 cellCenter) {
-  return 3.0 + 10.0 * hash21(cellCenter / CELL);
+  return 3.0 + 10.0 * hash21(cellId(cellCenter));
 }
 
 vec2 cellCenterOf(vec2 xz) {
@@ -137,7 +144,7 @@ vec3 hsv2rgb(vec3 c) {
 vec3 surfaceAlbedo(vec3 p) {
   // 床は常にグレー。柱は u_colorful のときセルごとの色相
   if (!u_colorful || isFloor(p)) return vec3(0.8);
-  float hue = hash21(cellCenterOf(p.xz) / CELL + 3.0);
+  float hue = hash21(cellId(cellCenterOf(p.xz)) + 3.0);
   return hsv2rgb(vec3(hue, 0.6, 0.8));
 }
 
