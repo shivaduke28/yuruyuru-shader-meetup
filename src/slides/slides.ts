@@ -24,6 +24,7 @@ export type Slide = {
     density: RandomRange
     falloff: RandomRange
     baseHeight: RandomRange
+    fogColor?: RandomRange
   }
 }
 
@@ -33,6 +34,7 @@ const plain: Partial<FogParams> = {
   baseHeight: [0, 0, 0],
   uniformDensity: [0, 0, 0],
   fogColor: [0.4, 0.4, 0.4],
+  emission: [0, 0, 0],
 }
 
 const rgb: Partial<FogParams> = {
@@ -41,6 +43,7 @@ const rgb: Partial<FogParams> = {
   baseHeight: [0, 1.5, 3],
   uniformDensity: [0, 0, 0],
   fogColor: [0.4, 0.4, 0.4],
+  emission: [0, 0, 0],
 }
 
 const uniform: Partial<FogParams> = {
@@ -155,15 +158,29 @@ color = mix(fogColor, color, exp(-fog));`),
     layout: 'demo',
     title: 'a, f, h を RGB ごとに変える',
     params: rgb,
-    // 右カラムの予算 (3 フォルダまで) に収めるため fog color は出さない
-    controls: [controlPresets.densityRGB, controlPresets.falloffRGB, controlPresets.baseHeightRGB],
+    controls: [
+      controlPresets.densityRGB,
+      controlPresets.falloffRGB,
+      controlPresets.baseHeightRGB,
+      controlPresets.fogColor,
+    ],
     randomize: {
       intervalMs: 1000,
       density: { min: 0.1, max: 0.8 },
       falloff: { min: 0.2, max: 1.2 },
       baseHeight: { min: 0, max: 4 },
+      fogColor: { min: 0.1, max: 0.8 },
     },
     body: '<p>float を vec3 にするだけ</p>',
+  },
+  {
+    id: 'emission',
+    layout: 'demo',
+    title: '発光',
+    params: { ...rgb, emission: [0.3, 0.15, 0.06] },
+    controls: [controlPresets.fogColor, controlPresets.emission],
+    side: code('color = mix(fogColor + emission, color, exp(-fog));'),
+    body: '<p>散乱で入ってくる光とは別に、フォグ自体が発する光を足す</p>',
   },
   {
     id: 'extras',

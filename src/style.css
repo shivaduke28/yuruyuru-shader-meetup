@@ -205,3 +205,63 @@ a {
   font-size: 0.9rem;
   color: var(--fg-dim);
 }
+
+/* ---------------- top ---------------- */
+
+body.top {
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.top-main {
+  padding: 32px 16px;
+  max-width: 720px;
+  width: 100%;
+}
+
+.top-main h1 {
+  font-size: clamp(2rem, 6vw, 3.2rem);
+  margin: 0 0 0.4rem;
+}
+
+.top-sub {
+  color: var(--fg-dim);
+  margin: 0.4rem 0;
+}
+
+.top-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin: 2rem 0;
+}
+
+.top-link {
+  display: block;
+  padding: 1.2rem 1.4rem;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.top-link:hover {
+  border-color: var(--accent);
+}
+
+.top-link-title {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.3rem;
+}
+
+.top-link-desc {
+  display: block;
+  color: var(--fg-dim);
+  font-size: 0.95rem;
+}

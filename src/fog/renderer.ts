@@ -24,6 +24,7 @@ const uniformNames = [
   'u_baseHeight',
   'u_uniformDensity',
   'u_fogColor',
+  'u_emission',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -127,6 +128,7 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_baseHeight, params.baseHeight)
     gl.uniform3fv(loc.u_uniformDensity, params.uniformDensity)
     gl.uniform3fv(loc.u_fogColor, params.fogColor)
+    gl.uniform3fv(loc.u_emission, params.emission)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }

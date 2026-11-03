@@ -14,6 +14,7 @@ uniform vec3 u_falloff;        // f
 uniform vec3 u_baseHeight;     // h
 uniform vec3 u_uniformDensity; // 高さに依存しない成分
 uniform vec3 u_fogColor;       // 内散乱に使う定数光
+uniform vec3 u_emission;       // フォグ自体が発する光
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -141,7 +142,8 @@ void main() {
   }
 
   vec3 T = fogTransmittance(ro, rd, d);
-  col = mix(u_fogColor, col, T);
+  // 散乱で入ってくる光 (fogColor) に、フォグ自体が発する光 (emission) を足す。面のアンビエントには足さない
+  col = mix(u_fogColor + u_emission, col, T);
 
   col = pow(col, vec3(1.0 / 2.2));
   fragColor = vec4(col, 1.0);

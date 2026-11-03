@@ -100,6 +100,7 @@ const show = (i: number) => {
         target.density[ch] = rand(r.density)
         target.falloff[ch] = rand(r.falloff)
         target.baseHeight[ch] = rand(r.baseHeight)
+        if (r.fogColor) target.fogColor[ch] = rand(r.fogColor)
       }
     }, r.intervalMs)
   }

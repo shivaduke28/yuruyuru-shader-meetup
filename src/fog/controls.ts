@@ -17,6 +17,7 @@ export const controlPresets = {
   baseHeightRGB: { key: 'baseHeight', mode: 'rgb', label: 'h (height)', min: -5, max: 15, step: 0.01 },
   uniformRGB: { key: 'uniformDensity', mode: 'rgb', label: 'uniform', min: 0, max: 0.1, step: 0.0005 },
   fogColor: { key: 'fogColor', mode: 'color', label: 'fog color' },
+  emission: { key: 'emission', mode: 'color', label: 'emission' },
 } satisfies Record<string, ControlSpec>
 
 // refresh() は値が変わっていると change を同期で投げるので、その間はユーザー操作として扱わない

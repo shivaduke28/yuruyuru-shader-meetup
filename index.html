@@ -5,23 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>指数関数高さフォグ</title>
   </head>
-  <body class="slides">
-    <main id="stage" class="stage">
-      <h1 id="title" class="title"></h1>
-      <div class="content">
-        <div class="demo"><canvas id="canvas"></canvas></div>
-        <aside class="side">
-          <div id="side-inner" class="fit">
-            <div id="side-content"></div>
-            <div id="pane" class="pane"></div>
-          </div>
-        </aside>
-      </div>
-      <section class="body">
-        <div id="body-inner" class="fit"></div>
-      </section>
-      <footer id="footer" class="footer"></footer>
+  <body class="top">
+    <main class="top-main">
+      <h1>指数関数高さフォグ</h1>
+      <p class="top-sub">ゆるゆるシェーダー交流会 #2 / shivaduke</p>
+      <nav class="top-links">
+        <a class="top-link" href="./slides.html">
+          <span class="top-link-title">スライド</span>
+          <span class="top-link-desc">←→ でページ送り。各ページでパラメータをいじれる</span>
+        </a>
+        <a class="top-link" href="./play.html">
+          <span class="top-link-title">Playground</span>
+          <span class="top-link-desc">全パラメータを RGB ごとに触れる</span>
+        </a>
+      </nav>
+      <p class="top-sub">
+        <a href="https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/" target="_blank" rel="noreferrer">ブログ</a> ·
+        <a href="https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8" target="_blank" rel="noreferrer">Pickles Note</a> ·
+        <a href="https://github.com/shivaduke28/yuruyuru-shader-meetup" target="_blank" rel="noreferrer">ソース</a>
+      </p>
     </main>
-    <script type="module" src="/src/slides/main.ts"></script>
+    <script type="module" src="/src/top/main.ts"></script>
   </body>
 </html>

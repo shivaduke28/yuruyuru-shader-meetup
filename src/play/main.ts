@@ -31,6 +31,7 @@ const bound = createFogPane(
     controlPresets.baseHeightRGB,
     controlPresets.uniformRGB,
     controlPresets.fogColor,
+    controlPresets.emission,
   ],
   'Height Fog',
 )
@@ -83,5 +84,5 @@ pane.addButton({ title: 'Reset' }).on('click', () => {
 
 infoEl.innerHTML = `
   <h1>Height Fog Playground</h1>
-  <p><a href="./">スライドに戻る</a></p>
+  <p><a href="./">トップ</a></p>
 `

@@ -12,6 +12,8 @@ export type FogParams = {
   uniformDensity: Vec3
   /** 内散乱に使う定数光（フォグ色） */
   fogColor: Vec3
+  /** フォグ自体が発する光 */
+  emission: Vec3
 }
 
 export const defaultFogParams = (): FogParams => ({
@@ -20,6 +22,7 @@ export const defaultFogParams = (): FogParams => ({
   baseHeight: [0.0, 0.0, 0.0],
   uniformDensity: [0, 0, 0],
   fogColor: [0.4, 0.4, 0.4],
+  emission: [0, 0, 0],
 })
 
 export const noFog = (): FogParams => ({
@@ -34,6 +37,7 @@ export const cloneParams = (p: FogParams): FogParams => ({
   baseHeight: [...p.baseHeight],
   uniformDensity: [...p.uniformDensity],
   fogColor: [...p.fogColor],
+  emission: [...p.emission],
 })
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t
@@ -50,6 +54,7 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.baseHeight, from.baseHeight, to.baseHeight, t)
   lerpVec(out.uniformDensity, from.uniformDensity, to.uniformDensity, t)
   lerpVec(out.fogColor, from.fogColor, to.fogColor, t)
+  lerpVec(out.emission, from.emission, to.emission, t)
 }
 
 /** dst の配列を差し替えずに、src の値を書き込む (配列を参照している UI を壊さない) */
