@@ -15,9 +15,10 @@ export const controlPresets = {
   densityRGB: { key: 'density', mode: 'rgb', label: 'density', min: 0, max: 1.5, step: 0.001 },
   falloffRGB: { key: 'falloff', mode: 'rgb', label: 'falloff', min: 0.01, max: 2, step: 0.001 },
   baseHeightRGB: { key: 'baseHeight', mode: 'rgb', label: 'height', min: -5, max: 15, step: 0.01 },
-  uniformRGB: { key: 'uniformDensity', mode: 'rgb', label: 'uniform extinction', min: 0, max: 0.2, step: 0.0005 },
+  uniformRGB: { key: 'uniformDensity', mode: 'rgb', label: 'density', min: 0, max: 0.2, step: 0.0005 },
   ambient: { key: 'ambient', mode: 'color', label: 'ambient' },
   albedo: { key: 'albedo', mode: 'color', label: 'albedo' },
+  uniformAlbedo: { key: 'uniformAlbedo', mode: 'color', label: 'albedo' },
   emission: { key: 'emission', mode: 'color', label: 'emission' },
   lightColor: { key: 'lightColor', mode: 'color', label: 'sun color' },
 } satisfies Record<string, ControlSpec>

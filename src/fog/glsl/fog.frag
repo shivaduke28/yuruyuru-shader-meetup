@@ -14,14 +14,14 @@ uniform vec3 u_falloff;        // f
 uniform vec3 u_baseHeight;     // h
 uniform vec3 u_uniformDensity; // 高さに依存しない成分
 uniform vec3 u_ambient;        // 環境光。面のアンビエントとフォグの内散乱に使う
-uniform vec3 u_albedo;         // フォグの散乱アルベド
+uniform vec3 u_albedo;         // 高さフォグの散乱アルベド
+uniform vec3 u_uniformAlbedo;  // 距離フォグの散乱アルベド
 uniform vec3 u_emission;       // フォグ自体が発する光
 uniform bool u_colorful;       // 柱の色をセルごとにランダムな色相にする
 uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
 uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
-uniform bool u_twoStream;      // 面の環境光とフォグの内散乱を 2 ストリーム近似の放射場から計算する
 uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す。u_lightAttenuation なら深さで減衰
-uniform bool u_ambientFog;     // 面の環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))。u_twoStream が優先
+uniform bool u_ambientFog;     // サーフェスの環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -138,76 +138,9 @@ vec3 sunTransmittance(vec3 p) {
   return exp(-min(tau, vec3(60.0)));
 }
 
-// ---------------------------------------------------------------------------
-// 2 ストリーム近似 (hemispheric mean、等方散乱)
-// 高さフォグを平行平板とみなし、上端から環境光 u_ambient が入り、床 (y = 0、反射率 SURFACE_ALBEDO) で反射するとして、
-// 上向き I+ と下向き I- の放射束 (放射輝度の単位。一様な放射場 L なら I+ = I- = L) を閉じた形で解く。
-// tau は上端から測った光学的深さ = kappa(y) / f。
-//   dI+/dtau = (2 - w) I+ - w I- - 2 w q e^{-k tau}
-//   dI-/dtau = w I+ - (2 - w) I- + 2 w q e^{-k tau}
-// 同次解は e^{±lam tau} (lam = 2 sqrt(1 - w)、gam = w / (2 - w + lam))、
-// 太陽 (源 q = lightColor / 4、k = 1 / L.y) の特解は pA e^{-k tau}, pB e^{-k tau}。
-//   I+ = c1a e^{lam (tau - 2 tauB)} + c1b e^{lam (tau - tauB) - k tauB} + gam c2 e^{-lam tau} + pA e^{-k tau}
-//   I- = gam (c1a e^{...} + c1b e^{...}) + c2 e^{-lam tau} + pB e^{-k tau}
-// 係数の e^{-2 lam tauB} などは指数にまとめる (tau <= tauB なので常に 0 以下でオーバーフローしない)。
-// w = 1 だと lam = 0 で退化するので w <= 0.99 に丸める。lam = k で特解が共鳴するので行列式を 0 から離す。
-// 太陽は u_sunScatter のときだけ入れる。2 ストリームの中では太陽は常に深さで減衰する (面の直接光は u_lightAttenuation に従う)。
-// 一様フォグ成分は含まない
-// ---------------------------------------------------------------------------
-struct TwoStream {
-  vec3 w, lam, gam, tauB;
-  vec3 c2;     // e^{-lam tau} の係数
-  vec3 c1a;    // e^{lam (tau - 2 tauB)} の係数
-  vec3 c1b;    // e^{lam (tau - tauB) - k tauB} の係数 (太陽が床で反射した分)
-  vec3 pA, pB; // 太陽の特解
-  vec3 q;      // 太陽の源
-  float k;
-};
-
+// 上端から測った高さフォグの光学的深さ tau(y) = kappa(y) / f (真上へ無限遠まで)
 vec3 tauFromTop(float y) {
   return u_density * exp(-u_falloff * (y - u_baseHeight)) / u_falloff;
-}
-
-TwoStream twoStreamSetup() {
-  TwoStream ts;
-  ts.w = min(u_albedo, vec3(0.99));
-  ts.lam = 2.0 * sqrt(1.0 - ts.w);
-  ts.gam = ts.w / (2.0 - ts.w + ts.lam);
-  ts.tauB = tauFromTop(0.0);
-  ts.k = 1.0 / LIGHT_DIR.y;
-  ts.q = u_sunScatter ? u_lightColor * 0.25 : vec3(0.0);
-  vec3 det = ts.lam * ts.lam - ts.k * ts.k;
-  det = mix(det, vec3(-1e-2), vec3(lessThan(abs(det), vec3(1e-2))));
-  ts.pA = 2.0 * ts.w * ts.q * (2.0 - ts.k) / det;
-  ts.pB = 2.0 * ts.w * ts.q * (2.0 + ts.k) / det;
-  // 境界条件: 上端で I- = ambient、床で I+ = rho (I- + 太陽の直達 lightColor L.y e^{-k tauB})
-  vec3 direct = u_sunScatter ? u_lightColor * LIGHT_DIR.y : vec3(0.0);
-  vec3 beta0 = (SURFACE_ALBEDO - ts.gam) / (1.0 - SURFACE_ALBEDO * ts.gam);
-  vec3 r = (SURFACE_ALBEDO * (ts.pB + direct) - ts.pA) / (1.0 - SURFACE_ALBEDO * ts.gam);
-  // c1 = beta0 e^{-2 lam tauB} c2 + r e^{-(k + lam) tauB} を上端の条件に入れて c2 を決める
-  vec3 d1 = beta0 * exp(-2.0 * ts.lam * ts.tauB);
-  vec3 d0 = r * exp(-(ts.k + ts.lam) * ts.tauB);
-  ts.c2 = (u_ambient - ts.pB - ts.gam * d0) / (1.0 + ts.gam * d1);
-  ts.c1a = ts.c2 * beta0;
-  ts.c1b = r;
-  return ts;
-}
-
-// 高さ y での上向き・下向きの放射束
-void twoStreamFlux(TwoStream ts, float y, out vec3 up, out vec3 down) {
-  vec3 tau = tauFromTop(y);
-  vec3 ePlus = ts.c1a * exp(ts.lam * (tau - 2.0 * ts.tauB)) + ts.c1b * exp(ts.lam * (tau - ts.tauB) - ts.k * ts.tauB);
-  vec3 eMinus = ts.c2 * exp(-ts.lam * tau);
-  vec3 eSun = exp(-ts.k * tau);
-  up = ePlus + ts.gam * eMinus + ts.pA * eSun;
-  down = ts.gam * ePlus + eMinus + ts.pB * eSun;
-}
-
-// 法線 n の面が受ける環境光。上を向く面は下向きの光を、下を向く面は上向きの光を受ける
-vec3 twoStreamAmbient(vec3 p, vec3 n) {
-  vec3 up, down;
-  twoStreamFlux(twoStreamSetup(), p.y, up, down);
-  return max(0.5 * ((1.0 + n.y) * down + (1.0 - n.y) * up), vec3(0.0));
 }
 
 // 視線に沿った積分 ∫_0^d T(t) kappa(t) e^{s tau(t) + off} dt の閉じた形 (tau は上端からの光学的深さ)。
@@ -229,29 +162,63 @@ void rayTaus(vec3 c, vec3 rd, float d, out vec3 tauCam, out vec3 tauEnd, out vec
   tauView = min(heightFogOpticalDepth(c, rd, d, u_density, u_falloff, u_baseHeight), vec3(1e4));
 }
 
-// 内散乱 ∫ T(t) kappa(t) w (J(tau(t)) + q e^{-k tau(t)}) dt。J = (I+ + I-) / 2 は e^{±lam tau}, e^{-k tau} の和なので
-// modeIntegral の和になる。q e^{-k tau} は太陽の単散乱 (u_sunScatter のとき)
-vec3 twoStreamInscatter(vec3 c, vec3 rd, float d) {
-  TwoStream ts = twoStreamSetup();
-  vec3 tauCam, tauEnd, tauView;
-  rayTaus(c, rd, d, tauCam, tauEnd, tauView);
-  vec3 iPlusA = modeIntegral(ts.lam, -2.0 * ts.lam * ts.tauB, tauCam, tauEnd, tauView, rd.y);
-  vec3 iPlusB = modeIntegral(ts.lam, -(ts.lam + ts.k) * ts.tauB, tauCam, tauEnd, tauView, rd.y);
-  vec3 iMinus = modeIntegral(-ts.lam, vec3(0.0), tauCam, tauEnd, tauView, rd.y);
-  vec3 iSun = modeIntegral(vec3(-ts.k), vec3(0.0), tauCam, tauEnd, tauView, rd.y);
-  vec3 diffuse = 0.5 * (1.0 + ts.gam) * (ts.c1a * iPlusA + ts.c1b * iPlusB + ts.c2 * iMinus);
-  vec3 sun = (0.5 * (ts.pA + ts.pB) + ts.q) * iSun;
-  return max(ts.w * (diffuse + sun), vec3(0.0));
+// ---------------------------------------------------------------------------
+// 高さフォグと距離フォグが混ざるときの内散乱
+// 視線に沿った ∫ T_view(t) kappa(t) ... dt は、T_view = e^{-tau_h(t) - kappa_u t} に距離フォグが入ると
+// w = e^{-fv t} の冪乗になって閉じない (不完全ガンマ関数)。そこで平均値の定理で、もう一方のフォグの透過率を積分の外に出す:
+//   高さフォグの項 × heightFactor = 1 / (1 + kappa_u t*)。t* は高さフォグの光学的深さが 1 になる距離
+//     (届かなければ密度の e 倍距離 1 / |fv|、水平なら 1 / k0)。水平なレイで厳密 (kappa_h / (kappa_h + kappa_u))
+//   距離フォグの項 × uniformFactor = 1 / (1 + tau_h(t_u))。t_u は距離フォグの内散乱の重み kappa_u e^{-kappa_u t} の [0, d] での平均距離
+//   Python の数値積分と比べて最大誤差 0.06 (plain + 距離フォグ 0.005〜0.08、空から急な見下ろしまで)。水平線をまたいで連続
+// ---------------------------------------------------------------------------
+void fogMixFactors(vec3 c, vec3 rd, float d, out vec3 heightFactor, out vec3 uniformFactor) {
+  vec3 k0 = u_density * exp(-u_falloff * (c.y - u_baseHeight)); // カメラ位置の高さフォグの密度
+  vec3 fv = u_falloff * rd.y;
+  bvec3 flat_ = lessThan(abs(fv), vec3(1e-4));
+  vec3 fvSafe = mix(fv, vec3(1.0), vec3(flat_));
+  // 高さフォグの光学的深さが 1 になる距離: (k0 / fv)(1 - e^{-fv t}) = 1 → t = -ln(1 - fv / k0) / fv
+  vec3 ratio = fv / max(k0, vec3(1e-6));
+  bvec3 reach = lessThan(ratio, vec3(1.0 - 1e-4));
+  vec3 tReach = -log(max(1.0 - ratio, vec3(1e-6))) / fvSafe;
+  vec3 tStar = mix(1.0 / abs(fvSafe), tReach, vec3(reach));
+  tStar = min(mix(tStar, 1.0 / max(k0, vec3(1e-6)), vec3(flat_)), vec3(d));
+  heightFactor = 1.0 / (1.0 + u_uniformDensity * tStar);
+
+  // 距離フォグの内散乱の重みの平均距離 (切断指数分布の平均) での高さフォグの光学的深さ
+  vec3 xd = u_uniformDensity * d;
+  bvec3 thin = lessThan(xd, vec3(1e-4));
+  vec3 xdSafe = mix(xd, vec3(1.0), vec3(thin));
+  vec3 tU = mix(1.0 / max(u_uniformDensity, vec3(1e-6)) - d * exp(-xdSafe) / (1.0 - exp(-xdSafe)), vec3(0.5 * d), vec3(thin));
+  vec3 tauH = mix(k0 * (1.0 - exp(-fvSafe * tU)) / fvSafe, k0 * tU, vec3(flat_));
+  uniformFactor = 1.0 / (1.0 + min(tauH, vec3(1e4)));
+}
+
+// 視線に沿って 2 つのフォグが散乱する量の比で albedo を混ぜる。片方しかなければそのフォグの albedo
+vec3 mixedAlbedo(vec3 c, vec3 rd, float d) {
+  if (all(equal(u_uniformDensity, vec3(0.0)))) return u_albedo;
+  if (all(equal(u_density, vec3(0.0)))) return u_uniformAlbedo;
+  vec3 hf, uf;
+  fogMixFactors(c, rd, d, hf, uf);
+  vec3 tauH = heightFogOpticalDepth(c, rd, d, u_density, u_falloff, u_baseHeight);
+  vec3 a = (1.0 - exp(-min(tauH, vec3(60.0)))) * hf;
+  vec3 b = (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
+  return (u_albedo * a + u_uniformAlbedo * b) / max(a + b, vec3(1e-6));
 }
 
 // 太陽光の単散乱 (等方)。位相関数 1/(4π) × 放射照度 π lightColor = lightColor / 4 が散乱の源。
-// 減衰ありなら点 t での太陽の透過率 e^{-tau(t) / L.y} が掛かる。これも tau の指数関数なので s = -1 / L.y のモード積分になる
+// 視線に沿って ∫ T_view(t) [albedo_h kappa_h(t) T_sun(t) + albedo_u kappa_u] dt を積分する。
+// T_sun = e^{-tau_h(t) / L.y} は高さフォグだけ (無限に広がる距離フォグは太陽を完全に遮ってしまうので、太陽は減衰させないと割り切る)。
+// 高さフォグの項は tau の指数関数なので s = -1 / L.y のモード積分、距離フォグの項は 1 - e^{-kappa_u d}。混ざるときは fogMixFactors
 vec3 sunInscatter(vec3 c, vec3 rd, float d, vec3 T) {
-  vec3 source = u_albedo * u_lightColor * 0.25;
-  if (!u_lightAttenuation) return source * (1.0 - T);
+  vec3 source = u_lightColor * 0.25;
+  if (!u_lightAttenuation) return source * mixedAlbedo(c, rd, d) * (1.0 - T);
   vec3 tauCam, tauEnd, tauView;
   rayTaus(c, rd, d, tauCam, tauEnd, tauView);
-  return source * modeIntegral(vec3(-1.0 / LIGHT_DIR.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y);
+  vec3 hf, uf;
+  fogMixFactors(c, rd, d, hf, uf);
+  vec3 heightTerm = u_albedo * modeIntegral(vec3(-1.0 / LIGHT_DIR.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y) * hf;
+  vec3 uniformTerm = u_uniformAlbedo * (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
+  return source * (heightTerm + uniformTerm);
 }
 
 // 面の環境光にフォグを単散乱で適用する。半球の各方向で「空の光が透過する分 T L_a」と「フォグの内散乱 w L_a (1 - T)」を足すと
@@ -259,7 +226,8 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d, vec3 T) {
 // <T> の積分は閉じないので、空へ向かう代表方向 1 本 (仰角 cos = 2/3) の透過率で代表する。
 // 上向きの面の <T> = 2 E3(tau) を exp(-1.5 tau) で近似する diffusivity factor で、数値積分でも上向きの面はよく合う。
 // 側面は本当は下半分が地面まで濃いフォグを通るので暗めになるはずだが、地面やシーンの仮定を持ち込まないために同じ T を使う
-// 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱) は、同じ代表方向で太陽の内散乱を積分して足す
+// 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱) は、同じ代表方向で太陽の内散乱を積分して足す。
+// 距離フォグは含めない (空まで無限に続くので T = 0 になってしまう)。albedo は高さフォグのもの
 const vec3 SKY_DIR = vec3(0.0, 2.0 / 3.0, 0.745356); // 長さ 1、y = 2/3
 vec3 singleScatterAmbient(vec3 p) {
   vec3 T = exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
@@ -272,7 +240,7 @@ vec3 shade(vec3 p, vec3 n) {
   float diff = max(dot(n, LIGHT_DIR), 0.0);
   float sh = shadow(p + n * 0.02, LIGHT_DIR);
   vec3 sun = u_lightColor * sunTransmittance(p);
-  vec3 ambient = u_twoStream ? twoStreamAmbient(p, n) : (u_ambientFog ? singleScatterAmbient(p) : u_ambient);
+  vec3 ambient = u_ambientFog ? singleScatterAmbient(p) : u_ambient;
   return surfaceAlbedo(p) * (diff * sh * sun + ambient);
 }
 
@@ -294,15 +262,10 @@ void main() {
   }
 
   vec3 T = fogTransmittance(ro, rd, d);
-  // 内散乱。既定は環境光 × 散乱アルベド × (1 - T) (Pickles の fogColor = ambient * albedo と同じ形) + 太陽の単散乱。
-  // 2 ストリームのときは太陽も 2 ストリームの中で扱う
-  vec3 inscatter;
-  if (u_twoStream) {
-    inscatter = twoStreamInscatter(ro, rd, d);
-  } else {
-    inscatter = u_ambient * u_albedo * (1.0 - T);
-    if (u_sunScatter) inscatter += sunInscatter(ro, rd, d, T);
-  }
+  // 内散乱 = 環境光 × 散乱アルベド × (1 - T) (Pickles の fogColor = ambient * albedo と同じ形) + 太陽の単散乱。
+  // 高さフォグと距離フォグで albedo が違うときは、散乱する量の比で混ぜる
+  vec3 inscatter = u_ambient * mixedAlbedo(ro, rd, d) * (1.0 - T);
+  if (u_sunScatter) inscatter += sunInscatter(ro, rd, d, T);
   col = col * T + inscatter + u_emission * (1.0 - T);
 
   col = pow(col, vec3(1.0 / 2.2));

@@ -86,8 +86,7 @@ const show = (i: number) => {
   footerEl.textContent = `${i + 1} / ${slides.length}`
 
   if (slide.params) assignParams(target, slide.params)
-  // トグルは現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)。2 ストリームは Playground 専用
-  renderer.twoStream = false
+  // トグルは現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
   renderer.ambientFog = slide.fogAmbient ?? false
   renderer.lightAttenuation = renderer.sunScatter = slide.fogSun ?? false
 

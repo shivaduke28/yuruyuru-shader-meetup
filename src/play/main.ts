@@ -12,7 +12,7 @@ const camera = defaultCamera()
 const renderer = createFogRenderer(canvas, params, camera)
 renderer.start()
 
-type Preset = { params: Partial<FogParams>; lightAttenuation?: boolean }
+type Preset = { params: Partial<FogParams>; fogSun?: boolean }
 
 const presets: Record<string, Preset> = {
   plain: { params: defaultFogParams() },
@@ -29,11 +29,11 @@ const presets: Record<string, Preset> = {
     params: {
       density: [0, 0, 0],
       uniformDensity: [0.08, 0.04, 0.02],
-      albedo: [0.1, 0.4, 0.7],
+      uniformAlbedo: [0.1, 0.4, 0.7],
       ambient: [0.2, 0.3, 0.45],
     },
   },
-  // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽は層の中で減衰、層の奥がうっすら光る
+  // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽はフォグの中で減衰して散乱、奥がうっすら光る
   gas: {
     params: {
       density: [1.5, 1.5, 1.5],
@@ -45,23 +45,18 @@ const presets: Record<string, Preset> = {
       lightColor: [1.0, 0.9, 0.75],
       emission: [0.0, 0.04, 0.0],
     },
-    lightAttenuation: true,
+    fogSun: true,
   },
 }
 
-const bound = createFogPane(
-  paneEl,
-  params,
-  [
-    controlPresets.densityRGB,
-    controlPresets.falloffRGB,
-    controlPresets.baseHeightRGB,
-    controlPresets.uniformRGB,
-    controlPresets.albedo,
-    controlPresets.emission,
-  ],
-  'Height Fog',
-)
+// トグルはスライドと同じ現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
+const toggles = { fogAmbient: false, fogSun: false }
+const applyToggles = () => {
+  renderer.ambientFog = toggles.fogAmbient
+  renderer.lightAttenuation = renderer.sunScatter = toggles.fogSun
+}
+
+const bound = createFogPane(paneEl, params, [])
 const pane = bound.pane
 
 const presetState = { preset: 'plain' }
@@ -74,19 +69,27 @@ pane
   .on('change', (ev) => {
     const preset = presets[ev.value]
     assignParams(params, { ...defaultFogParams(), ...preset.params })
-    renderer.lightAttenuation = preset.lightAttenuation ?? false
+    toggles.fogSun = preset.fogSun ?? false
+    applyToggles()
     bound.refresh()
     pane.refresh()
   })
-
 pane.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
 
-const light = pane.addFolder({ title: 'Light', expanded: true })
-bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
-light.addBinding(renderer, 'lightAttenuation', { label: 'height fog attenuation' })
-light.addBinding(renderer, 'ambientFog', { label: 'fog on ambient (single)' })
-light.addBinding(renderer, 'twoStream', { label: 'two-stream ambient' })
-light.addBinding(renderer, 'sunScatter', { label: 'sun scattering' })
+// フォルダはスライドの流れに揃える
+const heightFog = pane.addFolder({ title: 'Height Fog', expanded: true })
+bound.addControls(heightFog, [controlPresets.densityRGB, controlPresets.falloffRGB, controlPresets.baseHeightRGB, controlPresets.albedo])
+
+const distanceFog = pane.addFolder({ title: 'Distance Fog', expanded: true })
+bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo])
+
+const fogColor = pane.addFolder({ title: 'Fog Color', expanded: true })
+bound.addControls(fogColor, [controlPresets.ambient, controlPresets.emission])
+
+const sun = pane.addFolder({ title: 'Sun', expanded: true })
+bound.addControls(sun, [controlPresets.lightColor])
+sun.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
+sun.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
@@ -114,10 +117,8 @@ cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, lab
 pane.addButton({ title: 'Reset' }).on('click', () => {
   assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
-  renderer.lightAttenuation = false
-  renderer.twoStream = false
-  renderer.ambientFog = false
-  renderer.sunScatter = false
+  toggles.fogAmbient = toggles.fogSun = false
+  applyToggles()
   pane.refresh()
   bound.refresh()
 })

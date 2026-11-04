@@ -47,6 +47,7 @@ const plain: Partial<FogParams> = {
   uniformDensity: [0, 0, 0],
   ambient,
   albedo: [1, 1, 1],
+  uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
 }
@@ -58,6 +59,7 @@ const rgb: Partial<FogParams> = {
   uniformDensity: [0, 0, 0],
   ambient,
   albedo: [1, 1, 1],
+  uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
 }
@@ -77,7 +79,7 @@ const none: Partial<FogParams> = {
 const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
-const uniformControls = [controlPresets.ambient, controlPresets.uniform, controlPresets.albedo]
+const uniformControls = [controlPresets.ambient, controlPresets.uniform, controlPresets.uniformAlbedo]
 // フォグの形のパラメータと、色のパラメータを別のカードに分ける
 const heightControls = [
   [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
@@ -98,7 +100,7 @@ const uniformVariation = (
   id,
   layout: 'demo',
   title: '距離フォグ',
-  params: { ...uniform, uniformDensity: [fog, fog, fog], albedo, ambient: ambientOverride },
+  params: { ...uniform, uniformDensity: [fog, fog, fog], uniformAlbedo: albedo, ambient: ambientOverride },
   controls: uniformControls,
   side: distanceFogCode,
   body: `<p>${body}</p>`,
