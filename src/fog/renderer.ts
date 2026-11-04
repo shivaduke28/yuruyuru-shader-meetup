@@ -33,6 +33,9 @@ const uniformNames = [
   'u_colorful',
   'u_lightColor',
   'u_lightAttenuation',
+  'u_twoStream',
+  'u_sunScatter',
+  'u_ambientFog',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -46,6 +49,12 @@ export type FogRenderer = {
   colorful: boolean
   /** 平行光源を高さフォグで減衰させる */
   lightAttenuation: boolean
+  /** 面の環境光とフォグの内散乱を 2 ストリーム近似の放射場から計算する */
+  twoStream: boolean
+  /** 太陽光の単散乱をフォグの内散乱に足す */
+  sunScatter: boolean
+  /** 面の環境光にフォグを単散乱で適用する (twoStream が優先) */
+  ambientFog: boolean
   start(): void
   stop(): void
   dispose(): void
@@ -146,6 +155,9 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
     gl.uniform3fv(loc.u_lightColor, params.lightColor)
     gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
+    gl.uniform1i(loc.u_twoStream, renderer.twoStream ? 1 : 0)
+    gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
+    gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }
@@ -189,6 +201,9 @@ export const createFogRenderer = (
     resolutionScale: 1,
     colorful: false,
     lightAttenuation: false,
+    twoStream: false,
+    sunScatter: false,
+    ambientFog: false,
     start() {
       if (running) return
       running = true

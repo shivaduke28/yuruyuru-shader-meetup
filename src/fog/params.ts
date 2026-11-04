@@ -25,10 +25,10 @@ export const defaultFogParams = (): FogParams => ({
   falloff: [0.5, 0.5, 0.5],
   baseHeight: [0.0, 0.0, 0.0],
   uniformDensity: [0, 0, 0],
-  ambient: [0.4, 0.4, 0.4],
+  ambient: [0.25, 0.25, 0.25], // 暗めのグレー。太陽は暖色 (slides.ts と揃える)
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
-  lightColor: [1, 1, 1],
+  lightColor: [1.6, 1.45, 1.2],
 })
 
 export const noFog = (): FogParams => ({

@@ -84,6 +84,9 @@ pane.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
 const light = pane.addFolder({ title: 'Light', expanded: true })
 bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
 light.addBinding(renderer, 'lightAttenuation', { label: 'height fog attenuation' })
+light.addBinding(renderer, 'ambientFog', { label: 'fog on ambient (single)' })
+light.addBinding(renderer, 'twoStream', { label: 'two-stream ambient' })
+light.addBinding(renderer, 'sunScatter', { label: 'sun scattering' })
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
@@ -112,6 +115,9 @@ pane.addButton({ title: 'Reset' }).on('click', () => {
   assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
   renderer.lightAttenuation = false
+  renderer.twoStream = false
+  renderer.ambientFog = false
+  renderer.sunScatter = false
   pane.refresh()
   bound.refresh()
 })

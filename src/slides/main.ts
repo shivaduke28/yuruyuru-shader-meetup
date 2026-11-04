@@ -9,7 +9,8 @@ import {
   lerpParams,
   paramsEqual,
 } from '../fog/params'
-import { createFogPane, type BoundPane } from '../fog/controls'
+import { Pane } from 'tweakpane'
+import { createFogPane, type BoundPane, type ControlSpec } from '../fog/controls'
 import { slides } from './slides'
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
@@ -28,7 +29,9 @@ const camera = defaultCamera()
 const renderer = createFogRenderer(canvas, live, camera)
 renderer.start()
 
-let pane: BoundPane | null = null
+let panes: BoundPane[] = []
+// FogParams 以外のトグル (太陽光の減衰など) 用のカード
+let extraPane: Pane | null = null
 let index = -1
 let randomTimer = 0
 let draggingPane = false
@@ -53,6 +56,8 @@ const fitToBox = (inner: HTMLElement, axis: 'both' | 'width' | 'height' = 'both'
   inner.style.zoom = String(Number.isFinite(z) && z > 0 ? z : 1)
 }
 const fitAll = () => {
+  // 前のページの縮小が残っていると、枠 (親) の幅や高さを大きく測ってしまう。先に全部 1 に戻してから測る
+  for (const el of [sideEl, sideInnerEl, bodyEl]) el.style.zoom = '1'
   // コードは自分の幅だけで収める (スライダーを道連れにしない)。カラム全体は高さが溢れたときだけ縮める
   fitToBox(sideEl, 'width')
   fitToBox(sideInnerEl, 'height')
@@ -81,13 +86,36 @@ const show = (i: number) => {
   footerEl.textContent = `${i + 1} / ${slides.length}`
 
   if (slide.params) assignParams(target, slide.params)
+  // トグルは現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)。2 ストリームは Playground 専用
+  renderer.twoStream = false
+  renderer.ambientFog = slide.fogAmbient ?? false
+  renderer.lightAttenuation = renderer.sunScatter = slide.fogSun ?? false
 
-  pane?.pane.dispose()
-  pane = null
+  panes.forEach((p) => p.pane.dispose())
+  panes = []
+  extraPane?.dispose()
+  extraPane = null
   paneEl.innerHTML = ''
   if (slide.controls?.length) {
+    // 配列の配列ならカードごとに Pane を分ける
+    const groups = (Array.isArray(slide.controls[0]) ? slide.controls : [slide.controls]) as ControlSpec[][]
     // 表示は補間中の値 (live)、操作は目標値 (target) へ。手で動かしたときはトゥイーンせず即反映
-    pane = createFogPane(paneEl, target, slide.controls, undefined, live, () => assignParams(live, target))
+    panes = groups.map((specs) => createFogPane(paneEl, target, specs, undefined, live, () => assignParams(live, target)))
+  }
+  // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
+  if (slide.fogAmbient !== undefined || slide.fogSun !== undefined) {
+    extraPane = new Pane({ container: paneEl })
+    const toggles = { fogAmbient: renderer.ambientFog, fogSun: renderer.sunScatter }
+    if (slide.fogAmbient !== undefined) {
+      extraPane.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', (ev) => {
+        renderer.ambientFog = ev.value
+      })
+    }
+    if (slide.fogSun !== undefined) {
+      extraPane.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', (ev) => {
+        renderer.lightAttenuation = renderer.sunScatter = ev.value
+      })
+    }
   }
 
   fitAll()
@@ -101,6 +129,8 @@ const show = (i: number) => {
         target.falloff[ch] = rand(r.falloff)
         target.baseHeight[ch] = rand(r.baseHeight)
         if (r.albedo) target.albedo[ch] = rand(r.albedo)
+        if (r.ambient) target.ambient[ch] = rand(r.ambient)
+        if (r.emission) target.emission[ch] = rand(r.emission)
       }
     }, r.intervalMs)
   }
@@ -172,7 +202,7 @@ const tick = (now: number) => {
   const t = Math.min(1, (now - tweenStart) / 1000 / TWEEN_SECONDS)
   lerpParams(live, tweenFrom, tweenTarget, easeInOutCubic(t))
   // スライダーの表示も補間中の値に追従させる。ドラッグ中は手を離すまで触らない
-  if (!draggingPane) pane?.refresh()
+  if (!draggingPane) panes.forEach((p) => p.refresh())
   requestAnimationFrame(tick)
 }
 requestAnimationFrame(tick)

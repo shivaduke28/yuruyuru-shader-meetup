@@ -17,7 +17,13 @@ export type Slide = {
   /** 下の本文 */
   body?: string
   params?: Partial<FogParams>
-  controls?: ControlSpec[]
+  /** サーフェスの環境光にフォグを単散乱で適用する (renderer.ambientFog)。指定するとトグルも出る。省略時は false でトグルなし */
+  fogAmbient?: boolean
+  /** 太陽光にフォグを適用する: 面に届く太陽光の減衰と太陽光の内散乱をまとめてオンにする
+   *  (renderer.lightAttenuation + renderer.sunScatter)。指定するとトグルも出る */
+  fogSun?: boolean
+  /** スライダー。配列の配列にすると、内側の配列ごとに別のカード (Pane) になる */
+  controls?: ControlSpec[] | ControlSpec[][]
   /** 指定すると intervalMs ごとに各チャンネルの値をランダムに選び直す */
   randomize?: {
     intervalMs: number
@@ -25,17 +31,24 @@ export type Slide = {
     falloff: RandomRange
     baseHeight: RandomRange
     albedo?: RandomRange
+    ambient?: RandomRange
+    emission?: RandomRange
   }
 }
 
+// 環境光は暗めのグレー、太陽は暖色。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
+const ambient: [number, number, number] = [0.25, 0.25, 0.25]
+const lightColor: [number, number, number] = [1.6, 1.45, 1.2]
+
 const plain: Partial<FogParams> = {
-  density: [0.35, 0.35, 0.35],
+  density: [0.8, 0.8, 0.8],
   falloff: [0.5, 0.5, 0.5],
-  baseHeight: [0, 0, 0],
+  baseHeight: [1, 1, 1],
   uniformDensity: [0, 0, 0],
-  ambient: [0.4, 0.4, 0.4],
+  ambient,
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
+  lightColor,
 }
 
 const rgb: Partial<FogParams> = {
@@ -43,9 +56,10 @@ const rgb: Partial<FogParams> = {
   falloff: [0.35, 0.55, 0.9],
   baseHeight: [0, 1.5, 3],
   uniformDensity: [0, 0, 0],
-  ambient: [0.4, 0.4, 0.4],
+  ambient,
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
+  lightColor,
 }
 
 const uniform: Partial<FogParams> = {
@@ -64,7 +78,11 @@ const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
 const uniformControls = [controlPresets.ambient, controlPresets.uniform, controlPresets.albedo]
-const heightControls = [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight]
+// フォグの形のパラメータと、色のパラメータを別のカードに分ける
+const heightControls = [
+  [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+  [controlPresets.ambient, controlPresets.albedo],
+]
 
 const distanceFogCode = code(`vec3 fogColor = ambient * albedo;
 float t = exp(-density * dist);
@@ -75,28 +93,38 @@ const uniformVariation = (
   fog: number,
   albedo: [number, number, number],
   body: string,
-  ambient: [number, number, number] = [0.4, 0.4, 0.4],
+  ambientOverride: [number, number, number] = ambient,
 ): Slide => ({
   id,
   layout: 'demo',
   title: '距離フォグ',
-  params: { ...uniform, uniformDensity: [fog, fog, fog], albedo, ambient },
+  params: { ...uniform, uniformDensity: [fog, fog, fog], albedo, ambient: ambientOverride },
   controls: uniformControls,
   side: distanceFogCode,
   body: `<p>${body}</p>`,
 })
 
-const heightVariation = (id: string, a: number, f: number, h: number, body: string): Slide => ({
-  id,
-  layout: 'demo',
-  title: '指数関数高さフォグ',
-  params: { ...plain, density: [a, a, a], falloff: [f, f, f], baseHeight: [h, h, h] },
-  controls: heightControls,
-  side: code(`float a = ${a};
-float f = ${f};
-float h = ${h};`),
-  body: `<p>${body}</p>`,
-})
+const heightFogCode = code('float fog = density * exp(-falloff * (pos.y - height));')
+
+// 高さフォグの基準値 (plain) から 1 つだけパラメータを変えたスライド。変えたものと結果を本文で言う
+const heightVariation = (
+  id: string,
+  change: Partial<{ density: number; falloff: number; height: number }>,
+  body: string,
+): Slide => {
+  const density = change.density ?? plain.density![0]
+  const falloff = change.falloff ?? plain.falloff![0]
+  const height = change.height ?? plain.baseHeight![0]
+  return {
+    id,
+    layout: 'demo',
+    title: '指数関数高さフォグ',
+    params: { ...plain, density: [density, density, density], falloff: [falloff, falloff, falloff], baseHeight: [height, height, height] },
+    controls: heightControls,
+    side: heightFogCode,
+    body: `<p>${body}</p>`,
+  }
+}
 
 const assumptionItems = [
   'フォグの濃さがシーン内で均一',
@@ -158,7 +186,7 @@ export const slides: Slide[] = [
   uniformVariation('uniform-fog-thick', 0.15, [1, 1, 1], 'density を大きくすると、フォグが濃くなって近くしか見えない'),
   uniformVariation('uniform-fog-thin', 0.01, [1, 1, 1], 'density を小さくすると、フォグが薄くなって遠くまで見える'),
   uniformVariation('uniform-fog-color', 0.05, [1, 0, 0], 'albedo を変更すると、フォグの色が変わる'),
-  uniformVariation('uniform-fog-ambient', 0.05, [1, 1, 1], 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [0.4, 0, 0]),
+  uniformVariation('uniform-fog-ambient', 0.05, [1, 1, 1], 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [1, 0, 0]),
   assumptions('assumptions'),
   assumptions('assumptions-highlight', 0),
   {
@@ -167,38 +195,59 @@ export const slides: Slide[] = [
     title: '指数関数高さフォグ',
     params: plain,
     controls: heightControls,
-    side: code('float fog = a * exp(-f * (pos.y - h));'),
+    side: heightFogCode,
     body: `
+      <p>低いところほど濃いフォグ</p>
       <ul>
-        <li>a: h での濃さ</li>
-        <li>f: 減衰</li>
-        <li>h: 基準の高さ</li>
+        <li>density: 基準の高さでの濃さ</li>
+        <li>falloff: 上に行くほど薄くなる速さ</li>
+        <li>height: 基準の高さ</li>
       </ul>`,
   },
-  heightVariation('height-fog-a', 1.0, 0.5, 0, 'a を大きくすると全体が濃くなる'),
-  heightVariation('height-fog-f-small', 0.35, 0.25, 0, 'f を小さくすると減衰がゆっくりになり、上の方まで霧が残る'),
-  heightVariation('height-fog-f-large', 0.35, 1.5, 0, 'f を大きくすると減衰が速くなり、床の近くだけに霧が溜まる'),
+  heightVariation('height-fog-density', { density: 0.3 }, 'density を小さくすると、全体が薄くなる'),
+  heightVariation('height-fog-falloff-small', { falloff: 0.25 }, 'falloff を小さくすると、上の方までフォグが残る'),
+  heightVariation('height-fog-falloff-large', { falloff: 1.5 }, 'falloff を大きくすると、床の近くだけにフォグが溜まる'),
+  // 13 (falloff 1.5) から height だけ変える。falloff を戻すと 2 つ同時に変わって分かりにくい
+  heightVariation('height-fog-height', { falloff: 1.5, height: 4 }, 'height を上げると、フォグが上に移動する'),
   {
     id: 'formula',
     layout: 'demo',
     title: 'シェーダーコード',
     params: plain,
     controls: heightControls,
-    side: code(`float fv = f * rayDir.y;
-float i = fv == 0.0 ? dist : (1.0 - exp(-fv * dist)) / fv;
-float fog = a * exp(-f * (camPos.y - h)) * i;
+    side: code(`float heightFog(vec3 camPos, vec3 rayDir, float dist) {
+  float fv = falloff * rayDir.y;
+  float i = fv == 0.0 ? dist : (1.0 - exp(-fv * dist)) / fv;
+  return density * exp(-falloff * (camPos.y - height)) * i;
+}
+
+vec3 fogColor = ambient * albedo;
+float fog = heightFog(camPos, rayDir, dist);
 color = mix(fogColor, color, exp(-fog));`),
+    body: '<p>この式はボリュームレンダリング方程式から出てくるが、導出はここでは説明しない</p>',
+  },
+  {
+    id: 'emission',
+    layout: 'demo',
+    title: '発光',
+    // 環境光を消して、フォグ自体の発光だけで光っているのを見せる
+    params: { ...plain, ambient: [0, 0, 0], emission: [1, 0, 0] },
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.emission],
+    ],
+    side: code(`vec3 fogColor = ambient * albedo + emission;
+color = mix(fogColor, color, exp(-fog));`),
+    body: '<p>散乱で入ってくる光とは別に、フォグ自体が発する光を足す</p>',
   },
   {
     id: 'rgb',
     layout: 'demo',
-    title: 'a, f, h を RGB ごとに変える',
+    title: 'パラメータを RGB ごとに変える',
     params: rgb,
     controls: [
-      controlPresets.densityRGB,
-      controlPresets.falloffRGB,
-      controlPresets.baseHeightRGB,
-      controlPresets.albedo,
+      [controlPresets.densityRGB, controlPresets.falloffRGB, controlPresets.baseHeightRGB],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.emission],
     ],
     randomize: {
       intervalMs: 1000,
@@ -206,17 +255,53 @@ color = mix(fogColor, color, exp(-fog));`),
       falloff: { min: 0.2, max: 1.2 },
       baseHeight: { min: 0, max: 4 },
       albedo: { min: 0.2, max: 1 },
+      ambient: { min: 0.05, max: 0.3 },
+      emission: { min: 0, max: 0.3 },
     },
     body: '<p>float を vec3 にするだけ</p>',
   },
   {
-    id: 'emission',
+    id: 'fog-ambient',
     layout: 'demo',
-    title: '発光',
-    params: { ...rgb, emission: [0.3, 0.15, 0.06] },
-    controls: [controlPresets.ambient, controlPresets.albedo, controlPresets.emission],
-    side: code('color = mix(fogColor + emission, color, exp(-fog));'),
-    body: '<p>散乱で入ってくる光とは別に、フォグ自体が発する光を足す</p>',
+    title: 'サーフェスの環境光にフォグを適用する',
+    // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
+    params: { ...plain, albedo: [1, 0, 0] },
+    fogAmbient: true,
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo],
+    ],
+    side: code(`vec3 skyDir = vec3(0.0, 2.0 / 3.0, sqrt(5.0) / 3.0); // 空へ向かう代表方向 (仰角の cos = 2/3)
+float T = exp(-heightFog(pos, skyDir, 1e5));
+vec3 ambientHere = ambient * (1.0 - (1.0 - albedo) * (1.0 - T));
+color = surfaceColor * (diffuse * sun + ambientHere);`),
+    body: `
+      <p>サーフェスに届く環境光 = 透過する分 + フォグの内散乱 = ambient × (1 − (1 − albedo)(1 − T))。T は空へ向かう代表方向で計算</p>
+      <p>albedo が 1 ならフォグがあっても変わらない。吸収がある分だけ暗くなる</p>`,
+  },
+  {
+    id: 'fog-sun',
+    layout: 'demo',
+    title: '太陽光にフォグを適用する',
+    // 太陽を黄色にして、散乱した太陽光がサーフェスとフォグに乗るのが色で分かるようにする
+    params: { ...plain, albedo: [0.5, 0.5, 0.5], lightColor: [1.6, 1.4, 0.3] },
+    fogAmbient: true,
+    fogSun: true,
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor],
+    ],
+    side: code(`float fog = heightFog(pos, lightDir, 1e5);
+vec3 sun = sunColor * exp(-fog);          // サーフェスに届く太陽光が減衰する
+ambientHere += sunInscatter(pos, skyDir); // 散乱した太陽光がサーフェスに届く
+color = surfaceColor * (diffuse * sun + ambientHere);`),
+    body: `
+      <p>太陽光は 3 つの形で効くので、まとめて入れる</p>
+      <ul>
+        <li>サーフェスに届く太陽光がフォグで減衰する</li>
+        <li>太陽光がフォグで散乱してカメラに届く</li>
+        <li>太陽光がフォグで散乱してサーフェスに届く（環境光に足す）</li>
+      </ul>`,
   },
   {
     id: 'extras',
@@ -227,6 +312,7 @@ color = mix(fogColor, color, exp(-fog));`),
         <li>ノイズを乗せる</li>
         <li>点光源の散乱</li>
         <li>位相関数</li>
+        <li>多重散乱（Playground に 2 ストリーム近似を入れてある）</li>
       </ul>`,
     params: rgb,
   },
