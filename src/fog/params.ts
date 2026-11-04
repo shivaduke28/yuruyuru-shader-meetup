@@ -94,7 +94,7 @@ export type Camera = {
 }
 
 export const defaultCamera = (): Camera => ({
-  position: [3.5, 8, 0], // 柱の列は x = 7k にあるので、その間を進む
+  position: [0, 8, 0], // 柱の列は x = 4 + 8k にあるので、その間を進む
   yaw: 0,
   pitch: -0.15,
   speed: 3,

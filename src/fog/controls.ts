@@ -8,7 +8,7 @@ export type ControlSpec =
   | { key: Vec3Key; mode: 'color'; label: string }
 
 export const controlPresets = {
-  uniform: { key: 'uniformDensity', mode: 'scalar', label: 'fog', min: 0, max: 0.1, step: 0.0005 },
+  uniform: { key: 'uniformDensity', mode: 'scalar', label: 'density', min: 0, max: 0.2, step: 0.0005 },
   density: { key: 'density', mode: 'scalar', label: 'a (density)', min: 0, max: 1.5, step: 0.001 },
   falloff: { key: 'falloff', mode: 'scalar', label: 'f (falloff)', min: 0.01, max: 2, step: 0.001 },
   baseHeight: { key: 'baseHeight', mode: 'scalar', label: 'h (height)', min: -5, max: 15, step: 0.01 },

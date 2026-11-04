@@ -46,14 +46,14 @@ vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
 }
 
 // ---------------------------------------------------------------------------
-// シーン: y = 0 の床 + xz のセルごとに高さの違う柱
-// セルごとの SDF をグリッドトラバーサルで進める (参考: https://scrapbox.io/0b5vr/Shader:_Grid_Traversal)
+// シーン: y = 0 の床 + xz に CELL 間隔で並ぶ高さ固定の柱 (mod で繰り返す。柱はセル中央 CELL/2 + CELL*k)
 // ---------------------------------------------------------------------------
-const float CELL = 7.0;
-// 柱の並びは PERIOD_CELLS セルで繰り返す。カメラ座標を CELL * PERIOD_CELLS で巻き戻しても絵が続くようにして、
+const float CELL = 8.0;
+// 柱の色は PERIOD_CELLS セルで繰り返す。カメラ座標を CELL * PERIOD_CELLS で巻き戻しても絵が続くようにして、
 // 座標が大きくなって float の精度が落ちるのを防ぐ (renderer.ts の WORLD_PERIOD と一致させる)
 const float PERIOD_CELLS = 64.0;
 const float PILLAR_HALF_WIDTH = 0.7;
+const float PILLAR_HEIGHT = 12.0;
 const float FAR = 600.0;
 
 float sdBox(vec3 p, vec3 b) {
@@ -67,36 +67,23 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
-vec2 cellId(vec2 cellCenter) {
-  return mod(cellCenter / CELL, PERIOD_CELLS);
+vec2 cellId(vec2 xz) {
+  return mod(floor(xz / CELL), PERIOD_CELLS);
 }
 
-float pillarHeight(vec2 cellCenter) {
-  return 3.0 + 10.0 * hash21(cellId(cellCenter));
-}
-
-vec2 cellCenterOf(vec2 xz) {
-  return floor(xz / CELL + 0.5) * CELL;
-}
-
-float pillarSdf(vec3 p, vec2 cellCenter) {
-  float h = pillarHeight(cellCenter);
-  vec2 q = p.xz - cellCenter;
-  return sdBox(vec3(q.x, p.y - h * 0.5, q.y), vec3(PILLAR_HALF_WIDTH, h * 0.5, PILLAR_HALF_WIDTH));
-}
-
-// セル内だけを見た SDF: 床 + そのセルの柱
-float mapCell(vec3 p, vec2 cellCenter) {
-  return min(p.y, pillarSdf(p, cellCenter));
+// 柱はセルの中央にあって対称なので、mod で繰り返しても正しい SDF になる
+float pillarSdf(vec3 p) {
+  vec2 q = mod(p.xz, CELL) - 0.5 * CELL;
+  return sdBox(vec3(q.x, p.y - 0.5 * PILLAR_HEIGHT, q.y), vec3(PILLAR_HALF_WIDTH, 0.5 * PILLAR_HEIGHT, PILLAR_HALF_WIDTH));
 }
 
 // 当たった点が床か柱か。当たり判定は距離に比例して甘いので p.y では決めず、SDF のどちらが近いかで決める
 bool isFloor(vec3 p) {
-  return p.y <= pillarSdf(p, cellCenterOf(p.xz));
+  return p.y <= pillarSdf(p);
 }
 
 float mapScene(vec3 p) {
-  return mapCell(p, cellCenterOf(p.xz));
+  return min(p.y, pillarSdf(p));
 }
 
 vec3 calcNormal(vec3 p) {
@@ -107,22 +94,13 @@ vec3 calcNormal(vec3 p) {
     mapScene(p + e.yyx) - mapScene(p - e.yyx)));
 }
 
-// セルの境界で止まりながらレイマーチする。当たらなければ -1
+// 当たらなければ -1
 float raymarch(vec3 ro, vec3 rd, float maxDist, float minStep) {
-  // rd.xz が 0 だと 1/rd が inf になるので、ごく小さい値に逃がす
-  vec2 dxz = mix(rd.xz, vec2(1e-6), vec2(lessThan(abs(rd.xz), vec2(1e-6))));
-  vec2 invDir = 1.0 / dxz;
   float t = 0.0;
   for (int i = 0; i < 128; i++) {
-    vec3 p = ro + rd * t;
-    // 境界上の点が入る側のセルに入るよう、進行方向に少しずらして判定する
-    vec2 center = cellCenterOf(p.xz + dxz * 1e-3);
-    float h = mapCell(p, center);
+    float h = mapScene(ro + rd * t);
     if (h < 1e-3 * max(1.0, t)) return t;
-    // セルの各面までの距離。最小が境界までの距離
-    vec2 exitT = abs(0.5 * CELL * invDir) - (p.xz - center) * invDir;
-    float tExit = min(exitT.x, exitT.y);
-    t += max(min(h, tExit + 2e-3), minStep);
+    t += max(h, minStep);
     if (t > maxDist) break;
   }
   return -1.0;
@@ -144,7 +122,7 @@ vec3 hsv2rgb(vec3 c) {
 vec3 surfaceAlbedo(vec3 p) {
   // 床は常にグレー。柱は u_colorful のときセルごとの色相
   if (!u_colorful || isFloor(p)) return vec3(0.8);
-  float hue = hash21(cellId(cellCenterOf(p.xz)) + 3.0);
+  float hue = hash21(cellId(p.xz) + 3.0);
   return hsv2rgb(vec3(hue, 0.6, 0.8));
 }
 

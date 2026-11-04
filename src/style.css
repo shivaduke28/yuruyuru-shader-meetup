@@ -116,6 +116,10 @@ body.slides {
   user-select: none;
 }
 
+.body .highlight {
+  color: var(--accent);
+}
+
 /* 文字ページ: コンテンツ行を消して、本文をデモと同じ上端から始める */
 .stage.layout-text .content {
   display: none;

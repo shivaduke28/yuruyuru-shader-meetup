@@ -16,7 +16,7 @@ const compile = (gl: WebGL2RenderingContext, type: number, src: string) => {
 
 // ワールドは xz 方向にこの周期で繰り返す (fog.frag の CELL * PERIOD_CELLS)。
 // 進み続ける z をこの範囲に巻き戻し、座標が大きくなって float の精度が落ちるのを防ぐ
-const WORLD_PERIOD = 7 * 64
+const WORLD_PERIOD = 8 * 64
 
 const uniformNames = [
   'u_resolution',

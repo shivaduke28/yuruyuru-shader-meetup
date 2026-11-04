@@ -51,7 +51,7 @@ const rgb: Partial<FogParams> = {
 const uniform: Partial<FogParams> = {
   ...plain,
   density: [0, 0, 0],
-  uniformDensity: [0.02, 0.02, 0.02],
+  uniformDensity: [0.05, 0.05, 0.05],
 }
 
 const none: Partial<FogParams> = {
@@ -63,17 +63,27 @@ const none: Partial<FogParams> = {
 const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
-const uniformControls = [controlPresets.uniform, controlPresets.ambient, controlPresets.albedo]
+const uniformControls = [controlPresets.ambient, controlPresets.uniform, controlPresets.albedo]
 const heightControls = [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight]
 
-const uniformVariation = (id: string, fog: number, color: [number, number, number]): Slide => ({
+const distanceFogCode = code(`vec3 fogColor = ambient * albedo;
+float t = exp(-density * dist);
+color = mix(fogColor, color, t);`)
+
+const uniformVariation = (
+  id: string,
+  fog: number,
+  albedo: [number, number, number],
+  body: string,
+  ambient: [number, number, number] = [0.4, 0.4, 0.4],
+): Slide => ({
   id,
   layout: 'demo',
   title: '距離フォグ',
-  params: { ...uniform, uniformDensity: [fog, fog, fog], ambient: color },
+  params: { ...uniform, uniformDensity: [fog, fog, fog], albedo, ambient },
   controls: uniformControls,
-  side: code(`float fog = ${fog};
-vec3 fogColor = vec3(${color.join(', ')});`),
+  side: distanceFogCode,
+  body: `<p>${body}</p>`,
 })
 
 const heightVariation = (id: string, a: number, f: number, h: number, body: string): Slide => ({
@@ -88,6 +98,25 @@ float h = ${h};`),
   body: `<p>${body}</p>`,
 })
 
+const assumptionItems = [
+  'フォグの濃さがシーン内で均一',
+  'フォグを照らす光が全方向から同じ色で当たる',
+  '光が全方向に均一に散乱する',
+]
+
+/** 距離フォグの前提。highlight に番号を渡すとその行だけ強調する（次に変える仮定を示す） */
+const assumptions = (id: string, highlight?: number): Slide => ({
+  id,
+  layout: 'text',
+  title: '距離フォグの前提',
+  body: `
+      <p>次の仮定のもとでは物理ベースな計算になっている</p>
+      <ul>
+        ${assumptionItems.map((t, i) => (i === highlight ? `<li class="highlight">${t} ← これを変える！</li>` : `<li>${t}</li>`)).join('\n        ')}
+      </ul>`,
+  params: uniform,
+})
+
 export const slides: Slide[] = [
   {
     id: 'title',
@@ -99,8 +128,19 @@ export const slides: Slide[] = [
   {
     id: 'no-fog',
     layout: 'demo',
-    title: 'フォグなし',
+    title: 'レイマーチングでシーンを作る',
     params: none,
+    side: code(`float map(vec3 p) {
+  vec2 q = mod(p.xz, 8.0) - 4.0; // repetition
+  float ground = p.y;
+  float pillar = sdBox(vec3(q.x, p.y - 6.0, q.y), vec3(0.7, 6.0, 0.7));
+  return min(ground, pillar);
+}`),
+    body: `
+      <ul>
+        <li>床の上に高さの同じ柱を並べたシーンをレイマーチで描く</li>
+        <li>Repetition で柱を並べると無限遠がガビガビする</li>
+      </ul>`,
   },
   {
     id: 'uniform-fog',
@@ -108,25 +148,19 @@ export const slides: Slide[] = [
     title: '距離フォグ',
     params: uniform,
     controls: uniformControls,
-    side: code(`float t = exp(-fog * dist);
-color = mix(fogColor, color, t);`),
-  },
-  uniformVariation('uniform-fog-thin', 0.005, [0.4, 0.4, 0.4]),
-  uniformVariation('uniform-fog-thick', 0.05, [0.4, 0.4, 0.4]),
-  uniformVariation('uniform-fog-color', 0.02, [0.1, 0.1, 0.15]),
-  {
-    id: 'assumptions',
-    layout: 'text',
-    title: '距離フォグの前提',
+    side: distanceFogCode,
     body: `
-      <p>次の仮定のもとでは物理ベースな計算になっている</p>
       <ul>
-        <li>フォグの濃さがどこでも同じ</li>
-        <li>フォグを照らす光がどこでも同じ</li>
-        <li>光がどの方向にも同じように散る</li>
+        <li>density: フォグの濃さ</li>
+        <li>albedo: フォグが環境光をどのくらい反射するか</li>
       </ul>`,
-    params: uniform,
   },
+  uniformVariation('uniform-fog-thick', 0.15, [1, 1, 1], 'density を大きくすると、フォグが濃くなって近くしか見えない'),
+  uniformVariation('uniform-fog-thin', 0.01, [1, 1, 1], 'density を小さくすると、フォグが薄くなって遠くまで見える'),
+  uniformVariation('uniform-fog-color', 0.05, [1, 0, 0], 'albedo を変更すると、フォグの色が変わる'),
+  uniformVariation('uniform-fog-ambient', 0.05, [1, 1, 1], 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [0.4, 0, 0]),
+  assumptions('assumptions'),
+  assumptions('assumptions-highlight', 0),
   {
     id: 'height-fog',
     layout: 'demo',
