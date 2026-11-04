@@ -181,7 +181,7 @@ export const slides: Slide[] = [
     side: distanceFogCode,
     body: `
       <ul>
-        <li>density: フォグの濃さ</li>
+        <li>density: フォグの濃さ（正確には消散係数。単位は 1/長さ）</li>
         <li>albedo: フォグが環境光をどのくらい反射するか</li>
       </ul>`,
   },
@@ -189,6 +189,23 @@ export const slides: Slide[] = [
   uniformVariation('uniform-fog-thin', 0.01, [1, 1, 1], 'density を小さくすると、フォグが薄くなって遠くまで見える'),
   uniformVariation('uniform-fog-color', 0.05, [1, 0, 0], 'albedo を変更すると、フォグの色が変わる'),
   uniformVariation('uniform-fog-ambient', 0.05, [1, 1, 1], 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [1, 0, 0]),
+  {
+    id: 'uniform-fog-rgb',
+    layout: 'demo',
+    title: 'density を RGB にする',
+    // Playground の water プリセット: 赤から順に吸われ、散乱は青寄り、環境光は暗めの青
+    params: {
+      ...uniform,
+      uniformDensity: [0.16, 0.08, 0.04],
+      uniformAlbedo: [0.1, 0.4, 0.7],
+      ambient: [0.2, 0.3, 0.45],
+    },
+    controls: [controlPresets.ambient, controlPresets.uniformRGB, controlPresets.uniformAlbedo],
+    side: code(`vec3 fogColor = ambient * albedo;
+vec3 t = exp(-density * dist); // density を vec3 にするだけ
+color = mix(fogColor, color, t);`),
+    body: '<p>density を RGB ごとに変えると、距離によって色が変わる。水の中のように赤から順に吸われる</p>',
+  },
   assumptions('assumptions'),
   assumptions('assumptions-highlight', 0),
   {

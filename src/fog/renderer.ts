@@ -32,6 +32,8 @@ const uniformNames = [
   'u_uniformAlbedo',
   'u_emission',
   'u_colorful',
+  'u_pillarHalfWidth',
+  'u_pillarHeight',
   'u_lightColor',
   'u_lightAttenuation',
   'u_sunScatter',
@@ -47,6 +49,10 @@ export type FogRenderer = {
   resolutionScale: number
   /** 柱の色をセルごとにランダムな色相にする */
   colorful: boolean
+  /** 柱の半分の幅。セル (8) に収まるよう 3.5 以下 */
+  pillarHalfWidth: number
+  /** 柱の高さ */
+  pillarHeight: number
   /** 平行光源を高さフォグで減衰させる */
   lightAttenuation: boolean
   /** 太陽光の単散乱をフォグの内散乱に足す */
@@ -152,6 +158,8 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_uniformAlbedo, params.uniformAlbedo)
     gl.uniform3fv(loc.u_emission, params.emission)
     gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
+    gl.uniform1f(loc.u_pillarHalfWidth, renderer.pillarHalfWidth)
+    gl.uniform1f(loc.u_pillarHeight, renderer.pillarHeight)
     gl.uniform3fv(loc.u_lightColor, params.lightColor)
     gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
     gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
@@ -198,6 +206,8 @@ export const createFogRenderer = (
     camera,
     resolutionScale: 1,
     colorful: false,
+    pillarHalfWidth: 0.7,
+    pillarHeight: 12,
     lightAttenuation: false,
     sunScatter: false,
     ambientFog: false,

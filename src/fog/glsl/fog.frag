@@ -18,6 +18,8 @@ uniform vec3 u_albedo;         // 高さフォグの散乱アルベド
 uniform vec3 u_uniformAlbedo;  // 距離フォグの散乱アルベド
 uniform vec3 u_emission;       // フォグ自体が発する光
 uniform bool u_colorful;       // 柱の色をセルごとにランダムな色相にする
+uniform float u_pillarHalfWidth; // 柱の半分の幅 (セル 8 の中に収まる範囲)
+uniform float u_pillarHeight;    // 柱の高さ
 uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
 uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
 uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す。u_lightAttenuation なら深さで減衰
@@ -55,9 +57,7 @@ const float CELL = 8.0;
 // 柱の色は PERIOD_CELLS セルで繰り返す。カメラ座標を CELL * PERIOD_CELLS で巻き戻しても絵が続くようにして、
 // 座標が大きくなって float の精度が落ちるのを防ぐ (renderer.ts の WORLD_PERIOD と一致させる)
 const float PERIOD_CELLS = 64.0;
-const float PILLAR_HALF_WIDTH = 0.7;
 const float SURFACE_ALBEDO = 0.6; // 床と柱の反射率 (2 ストリーム近似の床の境界条件にも使う)
-const float PILLAR_HEIGHT = 12.0;
 const float FAR = 600.0;
 
 float sdBox(vec3 p, vec3 b) {
@@ -78,7 +78,7 @@ vec2 cellId(vec2 xz) {
 // 柱はセルの中央にあって対称なので、mod で繰り返しても正しい SDF になる
 float pillarSdf(vec3 p) {
   vec2 q = mod(p.xz, CELL) - 0.5 * CELL;
-  return sdBox(vec3(q.x, p.y - 0.5 * PILLAR_HEIGHT, q.y), vec3(PILLAR_HALF_WIDTH, 0.5 * PILLAR_HEIGHT, PILLAR_HALF_WIDTH));
+  return sdBox(vec3(q.x, p.y - 0.5 * u_pillarHeight, q.y), vec3(u_pillarHalfWidth, 0.5 * u_pillarHeight, u_pillarHalfWidth));
 }
 
 // 当たった点が床か柱か。当たり判定は距離に比例して甘いので p.y では決めず、SDF のどちらが近いかで決める
@@ -167,7 +167,7 @@ void rayTaus(vec3 c, vec3 rd, float d, out vec3 tauCam, out vec3 tauEnd, out vec
 // 視線に沿った ∫ T_view(t) kappa(t) ... dt は、T_view = e^{-tau_h(t) - kappa_u t} に距離フォグが入ると
 // w = e^{-fv t} の冪乗になって閉じない (不完全ガンマ関数)。そこで平均値の定理で、もう一方のフォグの透過率を積分の外に出す:
 //   高さフォグの項 × heightFactor = 1 / (1 + kappa_u t*)。t* は高さフォグの光学的深さが 1 になる距離
-//     (届かなければ密度の e 倍距離 1 / |fv|、水平なら 1 / k0)。水平なレイで厳密 (kappa_h / (kappa_h + kappa_u))
+//     (届かなければ密度の e 倍距離 1 / fv に連続につなぐ、水平なら 1 / k0)。水平なレイで厳密 (kappa_h / (kappa_h + kappa_u))
 //   距離フォグの項 × uniformFactor = 1 / (1 + tau_h(t_u))。t_u は距離フォグの内散乱の重み kappa_u e^{-kappa_u t} の [0, d] での平均距離
 //   Python の数値積分と比べて最大誤差 0.06 (plain + 距離フォグ 0.005〜0.08、空から急な見下ろしまで)。水平線をまたいで連続
 // ---------------------------------------------------------------------------
@@ -176,11 +176,11 @@ void fogMixFactors(vec3 c, vec3 rd, float d, out vec3 heightFactor, out vec3 uni
   vec3 fv = u_falloff * rd.y;
   bvec3 flat_ = lessThan(abs(fv), vec3(1e-4));
   vec3 fvSafe = mix(fv, vec3(1.0), vec3(flat_));
-  // 高さフォグの光学的深さが 1 になる距離: (k0 / fv)(1 - e^{-fv t}) = 1 → t = -ln(1 - fv / k0) / fv
-  vec3 ratio = fv / max(k0, vec3(1e-6));
-  bvec3 reach = lessThan(ratio, vec3(1.0 - 1e-4));
-  vec3 tReach = -log(max(1.0 - ratio, vec3(1e-6))) / fvSafe;
-  vec3 tStar = mix(1.0 / abs(fvSafe), tReach, vec3(reach));
+  // 高さフォグの光学的深さが 1 になる距離: (k0 / fv)(1 - e^{-fv t}) = 1 → t = -ln(1 - fv / k0) / fv。
+  // 上向きで 1 に届かないレイは、無限遠の光学的深さの 63% (= 密度の e 倍距離 1 / fv) に達する距離へ連続につなぐ。
+  // 届く・届かないで式を切り替えると、境目 (rd.y = k0 / f の等高線) が空に線として出る
+  vec3 ratio = min(fv / max(k0, vec3(1e-6)), vec3(1.0 - exp(-1.0)));
+  vec3 tStar = -log(max(1.0 - ratio, vec3(1e-6))) / fvSafe;
   tStar = min(mix(tStar, 1.0 / max(k0, vec3(1e-6)), vec3(flat_)), vec3(d));
   heightFactor = 1.0 / (1.0 + u_uniformDensity * tStar);
 

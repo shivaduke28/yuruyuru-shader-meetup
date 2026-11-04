@@ -28,7 +28,7 @@ const presets: Record<string, Preset> = {
   water: {
     params: {
       density: [0, 0, 0],
-      uniformDensity: [0.08, 0.04, 0.02],
+      uniformDensity: [0.16, 0.08, 0.04],
       uniformAlbedo: [0.1, 0.4, 0.7],
       ambient: [0.2, 0.3, 0.45],
     },
@@ -74,7 +74,11 @@ pane
     bound.refresh()
     pane.refresh()
   })
-pane.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
+
+const scene = pane.addFolder({ title: 'Scene', expanded: true })
+scene.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
+scene.addBinding(renderer, 'pillarHalfWidth', { label: 'cube half width', min: 0.1, max: 3.5, step: 0.05 })
+scene.addBinding(renderer, 'pillarHeight', { label: 'cube height', min: 0.5, max: 40, step: 0.5 })
 
 // フォルダはスライドの流れに揃える
 const heightFog = pane.addFolder({ title: 'Height Fog', expanded: true })
@@ -119,6 +123,9 @@ pane.addButton({ title: 'Reset' }).on('click', () => {
   presetState.preset = 'plain'
   toggles.fogAmbient = toggles.fogSun = false
   applyToggles()
+  renderer.colorful = false
+  renderer.pillarHalfWidth = 0.7
+  renderer.pillarHeight = 12
   pane.refresh()
   bound.refresh()
 })
