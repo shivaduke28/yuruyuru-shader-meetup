@@ -1,11 +1,10 @@
 import { Pane, type FolderApi } from 'tweakpane'
-import type { FogParams, Vec3 } from './params'
-
-export type Vec3Key = keyof FogParams
+import type { FogParams, NumberKey, Vec3, Vec3Key } from './params'
 
 export type ControlSpec =
   | { key: Vec3Key; mode: 'scalar' | 'rgb'; label: string; min: number; max: number; step?: number; help?: string }
   | { key: Vec3Key; mode: 'color'; label: string; help?: string }
+  | { key: NumberKey; mode: 'number'; label: string; min: number; max: number; step?: number; help?: string }
 
 // help はツールチップ (title 属性)。Tweakpane にはヘルプの仕組みがないのでブラウザ標準のもので代える
 const help = {
@@ -16,7 +15,8 @@ const help = {
   ambient: '環境光。全方向から同じ色で当たる。サーフェスの環境光と距離フォグの色、高さフォグが散乱する光',
   albedo: '高さフォグが環境光をどのくらい散乱して返すか (0..1)。フォグの色 = ambient × albedo',
   emission: '高さフォグ自体が発する光。フォグの色に足される',
-  lightColor: '太陽 (平行光源) の色 × 強さ',
+  lightColor: '太陽 (平行光源) の色。強さは sun intensity',
+  sunIntensity: '太陽の強さ。色にかける倍率 (1 を超える明るさは色でなくこちらで出す)',
 }
 
 export const controlPresets = {
@@ -32,6 +32,7 @@ export const controlPresets = {
   albedo: { key: 'albedo', mode: 'color', label: 'albedo', help: help.albedo },
   emission: { key: 'emission', mode: 'color', label: 'emission', help: help.emission },
   lightColor: { key: 'lightColor', mode: 'color', label: 'sun color', help: help.lightColor },
+  sunIntensity: { key: 'sunIntensity', mode: 'number', label: 'sun intensity', min: 0, max: 4, step: 0.01, help: help.sunIntensity },
 } satisfies Record<string, ControlSpec>
 
 /** ブレードにツールチップを付ける (title 属性)。チェーンできるように同じ API を返す */
@@ -100,6 +101,27 @@ const bindVec3 = (
   }
 }
 
+const bindNumber = (
+  folder: FolderApi | Pane,
+  display: FogParams,
+  target: FogParams,
+  spec: Extract<ControlSpec, { mode: 'number' }>,
+  onUserChange: () => void,
+) => {
+  const o = { v: display[spec.key] }
+  const b = folder.addBinding(o, 'v', { label: spec.label, min: spec.min, max: spec.max, step: spec.step })
+  if (spec.help) b.element.title = spec.help
+  b.on('change', (ev) => {
+    if (refreshing) return
+    target[spec.key] = ev.value
+    onUserChange()
+  })
+  return () => {
+    o.v = display[spec.key]
+    refreshQuietly([b])
+  }
+}
+
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
 
 const bindColor = (
@@ -152,9 +174,11 @@ export const createFogPane = (
   const addControls = (folder: FolderApi | Pane, specs: ControlSpec[]) => {
     for (const spec of specs) {
       refreshers.push(
-        spec.mode === 'color'
-          ? bindColor(folder, display[spec.key], target[spec.key], spec.label, onUserChange, spec.help)
-          : bindVec3(folder, display[spec.key], target[spec.key], spec, onUserChange),
+        spec.mode === 'number'
+          ? bindNumber(folder, display, target, spec, onUserChange)
+          : spec.mode === 'color'
+            ? bindColor(folder, display[spec.key], target[spec.key], spec.label, onUserChange, spec.help)
+            : bindVec3(folder, display[spec.key], target[spec.key], spec, onUserChange),
       )
     }
   }

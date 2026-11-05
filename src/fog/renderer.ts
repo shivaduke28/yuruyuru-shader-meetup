@@ -1,5 +1,5 @@
 import { fragmentSource, vertexSource } from './shader'
-import type { Camera, FogParams } from './params'
+import { srgbToLinear, type Camera, type FogParams } from './params'
 
 const compile = (gl: WebGL2RenderingContext, type: number, src: string) => {
   const shader = gl.createShader(type)
@@ -191,14 +191,16 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_falloff, params.falloff)
     gl.uniform3fv(loc.u_baseHeight, params.baseHeight)
     gl.uniform3fv(loc.u_uniformDensity, params.uniformDensity)
-    gl.uniform3fv(loc.u_ambient, params.ambient)
-    gl.uniform3fv(loc.u_albedo, params.albedo)
-    gl.uniform3fv(loc.u_emission, params.emission)
+    // 色は sRGB で持っているのでリニアに変換して渡す (Unity のリニアワークフローと同じ)
+    gl.uniform3fv(loc.u_ambient, srgbToLinear(params.ambient))
+    gl.uniform3fv(loc.u_albedo, srgbToLinear(params.albedo))
+    gl.uniform3fv(loc.u_emission, srgbToLinear(params.emission))
     gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
     gl.uniform1f(loc.u_pillarHalfWidth, renderer.pillarHalfWidth)
     gl.uniform1f(loc.u_pillarHeight, renderer.pillarHeight)
     gl.uniform3fv(loc.u_lightDir, sunDirection(renderer.sunAzimuth, renderer.sunElevation))
-    gl.uniform3fv(loc.u_lightColor, params.lightColor)
+    const sun = srgbToLinear(params.lightColor)
+    gl.uniform3f(loc.u_lightColor, sun[0] * params.sunIntensity, sun[1] * params.sunIntensity, sun[2] * params.sunIntensity)
     gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
     gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
     gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)

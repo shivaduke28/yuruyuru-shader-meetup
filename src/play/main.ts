@@ -37,7 +37,7 @@ const presets: Record<string, Preset> = {
     params: {
       density: [0, 0, 0],
       uniformDensity: [0.16, 0.08, 0.04],
-      ambient: [0.1, 0.25, 0.45],
+      ambient: [0.35, 0.54, 0.7],
     },
   },
   // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽はフォグの中で減衰して散乱、奥がうっすら光る
@@ -47,10 +47,11 @@ const presets: Record<string, Preset> = {
       falloff: [0.7, 0.7, 0.7],
       baseHeight: [0, 0, 0],
       uniformDensity: [0, 0, 0],
-      albedo: [0.55, 0.8, 0.3],
-      ambient: [0.3, 0.33, 0.3],
-      lightColor: [1.0, 0.9, 0.75],
-      emission: [0.0, 0.04, 0.0],
+      albedo: [0.77, 0.91, 0.58],
+      ambient: [0.58, 0.61, 0.58],
+      lightColor: [1, 0.95, 0.88],
+      sunIntensity: 1,
+      emission: [0, 0.22, 0],
     },
     toggles: { fogSun: true },
   },
@@ -135,7 +136,7 @@ withHelp(
 // 光源は色と向きだけ
 const lights = pane.addFolder({ title: 'Lights', expanded: true })
 folderHelp(lights, '光源。環境光は全方向から同じ色、太陽は平行光源')
-bound.addControls(lights, [controlPresets.ambient, controlPresets.lightColor])
+bound.addControls(lights, [controlPresets.ambient, controlPresets.lightColor, controlPresets.sunIntensity])
 withHelp(
   lights.addBinding(renderer, 'sunAzimuth', { label: 'sun azimuth', min: -180, max: 180, step: 1 }),
   '太陽の方位 (度)。0 でカメラの正面 (+z)。既定はカメラの後ろ',

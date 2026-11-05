@@ -391,6 +391,11 @@ vec3 shade(vec3 p, vec3 n) {
   return surfaceAlbedo(p) * (diff * sh * sun + ambient);
 }
 
+vec3 linearToSrgb(vec3 c) {
+  c = clamp(c, 0.0, 1.0);
+  return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+}
+
 void main() {
   vec2 uv = v_uv * vec2(u_resolution.x / u_resolution.y, 1.0);
   vec3 ro = u_cameraPosition;
@@ -426,6 +431,7 @@ void main() {
     col += u_lightColor * sunDisc(rd) * Th;
   }
 
-  col = pow(col, vec3(1.0 / 2.2));
-  fragColor = vec4(col, 1.0);
+  // 計算はリニアで、出力で sRGB にエンコードする。入力の色は renderer が sRGB -> リニアに変換して渡している
+  // (Unity のリニアワークフローと同じ)。1 を超えた分はクリップ (トーンマッピングなし)
+  fragColor = vec4(linearToSrgb(col), 1.0);
 }

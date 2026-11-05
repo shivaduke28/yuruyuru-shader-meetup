@@ -40,9 +40,10 @@ export type Slide = {
   }
 }
 
-// 環境光は暗めのグレー、太陽は暖色。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
-const ambient: [number, number, number] = [0.25, 0.25, 0.25]
-const lightColor: [number, number, number] = [1.6, 1.45, 1.2]
+// 環境光は暗めのグレー、太陽は暖色。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える。
+// 色は sRGB (params.ts 参照)。強さは sunIntensity (既定 1.6)
+const ambient: [number, number, number] = [0.54, 0.54, 0.54]
+const lightColor: [number, number, number] = [1, 0.96, 0.88]
 
 const plain: Partial<FogParams> = {
   density: [0.8, 0.8, 0.8],
@@ -198,7 +199,7 @@ export const slides: Slide[] = [
     params: {
       ...uniform,
       uniformDensity: [0.16, 0.08, 0.04],
-      ambient: [0.1, 0.25, 0.45],
+      ambient: [0.35, 0.54, 0.7],
     },
     controls: [controlPresets.ambient, controlPresets.uniformRGB],
     side: code(`vec3 fogColor = ambient;
@@ -274,9 +275,9 @@ color = mix(fogColor, color, exp(-fog));`),
       density: { min: 0.1, max: 0.8 },
       falloff: { min: 0.2, max: 1.2 },
       baseHeight: { min: 0, max: 4 },
-      albedo: { min: 0.2, max: 1 },
-      ambient: { min: 0.05, max: 0.3 },
-      emission: { min: 0, max: 0.3 },
+      albedo: { min: 0.48, max: 1 },
+      ambient: { min: 0.25, max: 0.58 },
+      emission: { min: 0, max: 0.58 },
     },
     body: '<p>float を vec3 にするだけ</p>',
   },
@@ -304,12 +305,12 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
     layout: 'demo',
     title: '太陽光にフォグを適用する',
     // 太陽を黄色にして、散乱した太陽光がサーフェスとフォグに乗るのが色で分かるようにする
-    params: { ...plain, albedo: [0.5, 0.5, 0.5], lightColor: [1.6, 1.4, 0.3] },
+    params: { ...plain, albedo: [0.74, 0.74, 0.74], lightColor: [1, 0.94, 0.47] },
     fogAmbient: true,
     fogSun: true,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor, controlPresets.sunIntensity],
     ],
     side: code(`float fog = heightFog(pos, lightDir, 1e5);
 vec3 sun = sunColor * exp(-fog);          // サーフェスに届く太陽光が減衰する
@@ -333,9 +334,10 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
       ...plain,
       density: [0.6, 0.6, 0.6],
       falloff: [0.3, 0.3, 0.3],
-      albedo: [0.8, 0.8, 0.8],
-      ambient: [0.12, 0.12, 0.14],
-      lightColor: [2.4, 2.0, 0.6],
+      albedo: [0.91, 0.91, 0.91],
+      ambient: [0.38, 0.38, 0.41],
+      lightColor: [1, 0.92, 0.54],
+      sunIntensity: 2.4,
     },
     sun: { azimuth: 25, elevation: 22 },
     fogAmbient: true,
@@ -343,7 +345,7 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
     sunShadow: true,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor, controlPresets.sunIntensity],
     ],
     side: code(`vec3 inscatter = vec3(0.0);
 for (int i = 0; i < 32; i++) {

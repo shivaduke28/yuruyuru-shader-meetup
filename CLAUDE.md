@@ -25,7 +25,7 @@ play.html         Playground (src/play/)
 src/fog/          スライドと Playground が共有する部分
   glsl/fog.frag   フルスクリーンレイマーチ + 指数関数高さフォグ。主役の関数は heightFogOpticalDepth
   glsl/fullscreen.vert
-  params.ts       FogParams (density/falloff/baseHeight/uniformDensity/ambient/albedo/emission/lightColor、すべて Vec3) と Camera
+  params.ts       FogParams (density/falloff/baseHeight/uniformDensity/ambient/albedo/emission/lightColor の Vec3 と sunIntensity) と Camera
   renderer.ts     WebGL2 の描画ループ、カメラ、ドラッグ・ホイール操作
   controls.ts     Tweakpane のバインディング。controlPresets にスライダーの定義
 src/slides/
@@ -74,7 +74,11 @@ src/style.css     スライド・Playground・トップのスタイル
   フォグの色 = `ambient * albedo + emission`。
   発光は既定では面のアンビエントに足さない。renderer の `emissionAmbient`（Playground の emission on surface）を入れると、空へ向かう代表方向の `emission * (1 - T)` を足す（高さフォグのみ）
 - 発光を散乱と同じ重みで足すのは、エミッションを密度に比例させたモデル（L_e = E·κ）として読めば厳密
-- 配色は環境光が暗めのグレー (0.25)、太陽が暖色で環境光より明るい (1.6, 1.45, 1.2)、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
+- 色空間は Unity のリニアワークフローと同じ。FogParams の色（ambient / albedo / emission / lightColor）と Tweakpane のカラーピッカーは sRGB で、
+  renderer が `srgbToLinear` でリニアに変換してシェーダーに渡す。シェーダーはリニアで計算し、最後に `linearToSrgb` で sRGB にエンコードして出す（トーンマッピングなし、1 超はクリップ）。
+  これでピッカーの色見本とフォグなしの空の色が一致する。1 を超える明るさは色では持たず、太陽は色（0..1）× `sunIntensity` に分ける（Unity の HDR カラーの intensity と同じ）。
+  シェーダー内の定数（サーフェスの反射率 0.6、colorful の HSV）はリニアのまま
+- 配色は環境光が暗めのグレー (sRGB 0.54、リニア 0.25)、太陽が暖色で環境光より明るい (色 (1, 0.96, 0.88) × 強さ 1.6。リニアで (1.6, 1.45, 1.2))、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
 - 高さフォグのスライド 11〜14 は `plain` を基準に 1 枚 1 パラメータだけ変える（`heightVariation` に変えるものだけ渡す）
 - renderer のフラグは `lightAttenuation`（サーフェスに届く太陽光の減衰）、`sunScatter`（太陽光の内散乱）、`ambientFog`（サーフェスの環境光にフォグを単散乱で適用）、`emissionAmbient`（サーフェスの環境光にフォグの発光を足す。Playground のみ）、
   `volumetricShadow`（太陽の内散乱で柱の影を見る光芒。`sunScatter` のときだけ効く。スライドでは `sunShadow`）の 5 つ。
