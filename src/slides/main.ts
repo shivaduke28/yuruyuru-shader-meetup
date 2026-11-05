@@ -91,6 +91,7 @@ const show = (i: number) => {
   renderer.sunAttenuation = renderer.sunInscatter = renderer.sunInscatterAmbient = slide.fogSun ?? false
   renderer.sunInscatterShadow = slide.sunShadow ?? false
   // ノイズはスライドごとに既定値に戻す (前のスライドでスライダーを動かしても持ち越さない)
+  renderer.phaseG = slide.phaseG ?? 0
   const noise = { ...DEFAULT_NOISE, ...slide.noise }
   renderer.noise = slide.noise !== undefined
   renderer.noiseScale = noise.scale
@@ -114,7 +115,7 @@ const show = (i: number) => {
   // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
   const showToggle = (k: 'fogAmbient' | 'fogSun' | 'sunShadow' | 'noise') =>
     slide[k] !== undefined && (slide.toggles === undefined || slide.toggles.includes(k))
-  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow') || showToggle('noise')) {
+  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow') || showToggle('noise') || slide.phaseG !== undefined) {
     extraPane = new Pane({ container: paneEl })
     const toggles = {
       skyAttenuation: renderer.skyAttenuation,
@@ -147,6 +148,9 @@ const show = (i: number) => {
       extraPane.addBinding(toggles, 'sunInscatterShadow', { label: 'sun inscatter shadow' }).on('change', (ev) => {
         renderer.sunInscatterShadow = ev.value
       })
+    }
+    if (slide.phaseG !== undefined) {
+      extraPane.addBinding(renderer, 'phaseG', { label: 'phase g', min: -0.9, max: 0.9, step: 0.01 })
     }
     if (showToggle('noise')) {
       extraPane.addBinding(renderer, 'noise', { label: 'noise' })

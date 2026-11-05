@@ -28,6 +28,8 @@ export type Slide = {
   sunShadow?: boolean
   /** 濃さに 3D ノイズをかける (renderer.noise)。指定するとトグルとノイズのスライダーも出る。省略したキーは renderer の既定 */
   noise?: Partial<typeof DEFAULT_NOISE>
+  /** 太陽光の散乱の Henyey-Greenstein の g (renderer.phaseG)。指定するとスライダーも出る。省略時は 0 (等方) */
+  phaseG?: number
   /** トグルを出すものを絞る。省略時は fogAmbient / fogSun / sunShadow / noise のうち指定したもの全部 */
   toggles?: ('fogAmbient' | 'fogSun' | 'sunShadow' | 'noise')[]
   /** 太陽の向き (度)。省略時は renderer の既定 (カメラの後ろ上からの順光) */
@@ -380,6 +382,41 @@ for (int i = 0; i < 32; i++) {
       </ul>`,
   },
   {
+    id: 'phase',
+    layout: 'demo',
+    title: '位相関数',
+    // 光芒と同じ逆光の構図。g = 0.5 で太陽の周りのフォグが明るくなり、光芒が太陽の周りに集まる。スライダーで 0 に戻して比べる
+    params: {
+      ...plain,
+      density: [0.6, 0.6, 0.6],
+      falloff: [0.3, 0.3, 0.3],
+      albedo: [0.91, 0.91, 0.91],
+      ambient: [0.38, 0.38, 0.41],
+      lightColor: [1, 0.92, 0.54],
+      sunIntensity: 2.4,
+    },
+    sun: { azimuth: 25, elevation: 22 },
+    fogAmbient: true,
+    fogSun: true,
+    sunShadow: true,
+    toggles: [],
+    phaseG: 0.5,
+    controls: [[controlPresets.density, controlPresets.falloff, controlPresets.baseHeight]],
+    side: code(`// Henyey-Greenstein。g = 0 で等方、g > 0 で前方散乱
+float phase(float cosTheta, float g) {
+  return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g * g - 2.0 * g * cosTheta, 1.5));
+}
+
+// 太陽の向きは一定なので、視線上で定数。内散乱に係数としてかけるだけ
+sunFog *= phase(dot(rayDir, lightDir), g) * 4.0 * PI;`),
+    body: `
+      <p>散乱する向きに偏りをつける</p>
+      <ul>
+        <li>g &gt; 0 で光の進む向きに散乱しやすい（前方散乱）。太陽の周りのフォグが明るく、反対側が暗くなる</li>
+        <li>太陽光は向きが一定なので、位相関数は視線上で定数。閉じた式に係数をかけるだけ</li>
+      </ul>`,
+  },
+  {
     id: 'noise',
     layout: 'demo',
     title: 'ノイズ',
@@ -418,7 +455,6 @@ T = pow(T, R / w);                   // 平均で透過率を変える`),
     body: `
       <ul>
         <li>点光源の散乱</li>
-        <li>位相関数</li>
       </ul>`,
     params: rgb,
   },

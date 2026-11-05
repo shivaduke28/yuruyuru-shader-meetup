@@ -161,6 +161,11 @@ withHelp(
   heightFog.addBinding(toggles, 'sunInscatterShadow', { label: 'sun inscatter shadow' }),
   'sun inscatter をレイマーチして柱の影を入れる (光芒)。sun inscatter のときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い',
 ).on('change', applyToggles)
+// 太陽光の散乱の向きの偏り。sun inscatter の 3 つ全部に同じ係数で効く
+withHelp(
+  heightFog.addBinding(renderer, 'phaseG', { label: 'phase g', min: -0.9, max: 0.9, step: 0.01 }),
+  '太陽光の散乱の Henyey-Greenstein の g。0 で等方、正で前方散乱 (太陽の周りのフォグが明るく、反対側が暗い)、負で後方散乱',
+)
 withHelp(
   heightFog.addBinding(toggles, 'emissionAmbient', { label: 'emission ambient' }),
   '高さフォグの発光をサーフェスの環境光に足す: emission × (1 − T)',
@@ -224,6 +229,7 @@ withHelp(topPane.addButton({ title: 'Reset' }), 'Camera も含めて全部を既
   renderer.pillarHeight = 12
   renderer.sunAzimuth = DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = DEFAULT_SUN_ELEVATION
+  renderer.phaseG = 0
   renderer.noise = false
   renderer.noiseScale = DEFAULT_NOISE.scale
   renderer.noiseMin = DEFAULT_NOISE.min

@@ -24,6 +24,7 @@ uniform vec3 u_lightDir;       // 平行光源の向き (光源へ向かう単�
 uniform bool u_sunAttenuation; // 平行光源を高さフォグで減衰させる
 uniform bool u_sunInscatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す (カメラへ)。u_sunAttenuation なら深さで減衰
 uniform bool u_sunInscatterAmbient; // 太陽光の単散乱をサーフェスの環境光に足す (サーフェスへ)
+uniform float u_phaseG;        // 太陽光の散乱の Henyey-Greenstein の g (-1..1)。0 で等方、正で前方散乱
 uniform bool u_skyAttenuation;      // サーフェスの環境光 (空の光) を空方向の透過率で減衰させる: ambient * T
 uniform bool u_skyInscatterAmbient; // 空の光がフォグで散乱してサーフェスに届く分を環境光に足す: ambient * albedo * (1 - T)
 uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
@@ -216,7 +217,16 @@ vec3 mixByScatter(vec3 h, vec3 u, vec3 a, vec3 b) {
   return (h * a + u * b) / max(a + b, vec3(1e-6));
 }
 
-// 太陽光の単散乱 (等方)。位相関数 1/(4π) × 放射照度 π lightColor = lightColor / 4 が散乱の源。
+// 太陽光の位相関数 × π。放射照度 π lightColor にかけると散乱の源 (視線方向へ散乱する放射輝度) になる。
+// Henyey-Greenstein で、g = 0 なら 1/(4π) × π = 1/4 (等方)。cosTheta = dot(視線, 太陽の向き) で、太陽を見る向きが 1。
+// 平行光源は向きが一定なので視線上で定数になり、積分の外に出せる (閉じた式はそのまま)
+float sunPhase(float cosTheta) {
+  float g = u_phaseG;
+  float g2 = g * g;
+  return 0.25 * (1.0 - g2) / pow(max(1.0 + g2 - 2.0 * g * cosTheta, 1e-4), 1.5);
+}
+
+// 太陽光の単散乱。位相関数 × 放射照度 (sunPhase × lightColor) が散乱の源。
 // 視線に沿って ∫ T_view(t) albedo_h kappa_h(t) T_sun(t) dt を積分する。高さフォグだけで、距離フォグは太陽光を散乱しない
 // (無限に広がる一様フォグの放射は ambient に含まれる。足すと密度がいくら小さくても lightColor / 4 に飽和して空やサーフェスが跳ぶ)。
 // T_sun = e^{-tau_h(t) / L.y} も高さフォグだけ (距離フォグは太陽を減衰させない)。
@@ -230,7 +240,7 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d) {
   vec3 scatter = u_sunAttenuation
     ? modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y)
     : 1.0 - exp(-tauView);
-  return u_lightColor * 0.25 * u_albedo * scatter * hf;
+  return u_lightColor * sunPhase(dot(rd, u_lightDir)) * u_albedo * scatter * hf;
 }
 
 // フォグの中の点 p から太陽への影 (柱だけ。床は上向きのレイを遮らない)。
@@ -270,7 +280,7 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
     vec3 kappaH = u_density * exp(-u_falloff * (p.y - u_baseHeight));
     sum += Tview * u_albedo * kappaH * sunTransmittance(p) * (vis * dt);
   }
-  vec3 result = u_lightColor * 0.25 * sum;
+  vec3 result = u_lightColor * sunPhase(dot(rd, u_lightDir)) * sum;
   if (d > tEnd) {
     vec3 pEnd = c + rd * tEnd;
     result += fogTransmittance(c, rd, tEnd) * sunInscatter(pEnd, rd, d - tEnd);

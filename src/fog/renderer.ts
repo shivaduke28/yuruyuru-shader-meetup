@@ -58,6 +58,7 @@ const uniformNames = [
   'u_skyInscatterAmbient',
   'u_emissionAmbient',
   'u_sunInscatterShadow',
+  'u_phaseG',
   'u_noise',
   'u_noiseScale',
   'u_noiseMin',
@@ -96,6 +97,8 @@ export type FogRenderer = {
   emissionAmbient: boolean
   /** 太陽光の内散乱で柱と床の影を見る (視線をレイマーチして数値積分。重い)。sunInscatter のときだけ効く */
   sunInscatterShadow: boolean
+  /** 太陽光の散乱の Henyey-Greenstein の g (-1..1)。0 で等方 (lightColor / 4)、正で前方散乱 (太陽の周りが明るい) */
+  phaseG: number
   /** 消散係数に 3D ノイズをかける (Pickles Note の Noise。視線の透過率にだけ効く) */
   noise: boolean
   /** ノイズの周波数 (1/長さ)。z 方向はワールドの周期で割り切れる値に丸める */
@@ -216,6 +219,7 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_skyInscatterAmbient, renderer.skyInscatterAmbient ? 1 : 0)
     gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
     gl.uniform1i(loc.u_sunInscatterShadow, renderer.sunInscatterShadow ? 1 : 0)
+    gl.uniform1f(loc.u_phaseG, renderer.phaseG)
     gl.uniform1i(loc.u_noise, renderer.noise ? 1 : 0)
     gl.uniform1f(loc.u_noiseScale, renderer.noiseScale)
     gl.uniform1f(loc.u_noiseMin, renderer.noiseMin)
@@ -274,6 +278,7 @@ export const createFogRenderer = (
     skyInscatterAmbient: false,
     emissionAmbient: false,
     sunInscatterShadow: false,
+    phaseG: 0,
     noise: false,
     noiseScale: DEFAULT_NOISE.scale,
     noiseMin: DEFAULT_NOISE.min,
