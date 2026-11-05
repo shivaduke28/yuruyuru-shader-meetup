@@ -109,6 +109,14 @@ sun.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyTog
 // fog on sun がオンのときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い
 sun.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }).on('change', applyToggles)
 
+// 消散係数に 3D ノイズをかける (Pickles Note の Noise)。視線の透過率にだけ効く
+const noise = pane.addFolder({ title: 'Noise', expanded: true })
+noise.addBinding(renderer, 'noise', { label: 'enabled' })
+noise.addBinding(renderer, 'noiseScale', { label: 'scale', min: 0.02, max: 3, step: 0.01 })
+noise.addBinding(renderer, 'noiseMin', { label: 'min', min: 0, max: 2, step: 0.01 })
+noise.addBinding(renderer, 'noiseMax', { label: 'max', min: 0, max: 2, step: 0.01 })
+noise.addBinding(renderer, 'noiseSpeed', { label: 'speed', min: 0, max: 5, step: 0.1 })
+
 const cam = pane.addFolder({ title: 'Camera', expanded: true })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
 const pos = { x: camera.position[0], y: camera.position[1] }
@@ -142,6 +150,11 @@ pane.addButton({ title: 'Reset' }).on('click', () => {
   renderer.pillarHeight = 12
   renderer.sunAzimuth = DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = DEFAULT_SUN_ELEVATION
+  renderer.noise = false
+  renderer.noiseScale = 0.15
+  renderer.noiseMin = 0
+  renderer.noiseMax = 1
+  renderer.noiseSpeed = 0.5
   pane.refresh()
   bound.refresh()
 })

@@ -28,6 +28,11 @@ uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの
 uniform bool u_ambientFog;     // サーフェスの環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))
 uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
 uniform bool u_volumetricShadow; // 太陽光の内散乱で、サンプル点から太陽への影 (柱・床) を見る。視線をレイマーチして数値積分する (光芒)
+uniform bool u_noise;           // 消散係数に 3D ノイズをかける (視線の透過率にだけ効く)
+uniform float u_noiseScale;     // ノイズの周波数 (1/長さ)
+uniform float u_noiseMin;       // r = mix(noiseMin, noiseMax, fbm)
+uniform float u_noiseMax;
+uniform float u_noiseSpeed;     // ノイズの流れる速さ (長さ/秒)
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -297,6 +302,76 @@ vec3 singleScatterAmbient(vec3 p, vec3 T) {
   return ambient;
 }
 
+// ---------------------------------------------------------------------------
+// ノイズ (Pickles Note の Noise)
+// 消散係数にノイズをかける: kappa~(p) = r(p) kappa(p)、r: R^3 -> [0, 1]。
+// 光学的深さは tau~ = ∫ r kappa dt = R_bar tau で厳密 (R_bar は視線に沿った kappa 重み付きのノイズ平均)。
+// tau は閉じた式のまま使い、R_bar だけサンプルで見積もる。T~ = exp(-R_bar tau) = T^R_bar
+// ---------------------------------------------------------------------------
+float hash31(vec3 p) {
+  p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
+  p *= 17.0;
+  return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+
+// 3D バリューノイズ。格子の z をワールドの周期 (CELL * PERIOD_CELLS) で巻いて、カメラ座標の巻き戻しで絵が飛ばないようにする
+float valueNoise(vec3 p, float periodZ) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float z0 = mod(i.z, periodZ);
+  float z1 = mod(i.z + 1.0, periodZ);
+  float n000 = hash31(vec3(i.xy, z0)),            n100 = hash31(vec3(i.x + 1.0, i.y, z0));
+  float n010 = hash31(vec3(i.x, i.y + 1.0, z0)),  n110 = hash31(vec3(i.xy + 1.0, z0));
+  float n001 = hash31(vec3(i.xy, z1)),            n101 = hash31(vec3(i.x + 1.0, i.y, z1));
+  float n011 = hash31(vec3(i.x, i.y + 1.0, z1)),  n111 = hash31(vec3(i.xy + 1.0, z1));
+  float nx00 = mix(n000, n100, f.x), nx10 = mix(n010, n110, f.x);
+  float nx01 = mix(n001, n101, f.x), nx11 = mix(n011, n111, f.x);
+  return mix(mix(nx00, nx10, f.y), mix(nx01, nx11, f.y), f.z);
+}
+
+// 3 オクターブの fbm (振幅 0.5, 0.25, 0.125) を [0, 1] に正規化し、mix(noiseMin, noiseMax, fbm) を返す。
+// 周波数は z 方向にワールドの周期で割り切れる値に丸める (周期 512 に対して 1 / 512 刻み)。
+// 流れは上向き (z をずらすと周期の巻きが崩れるので z には付けない)
+float fogNoise(vec3 p) {
+  float worldPeriod = CELL * PERIOD_CELLS;
+  float cellsZ = max(round(u_noiseScale * worldPeriod), 1.0);
+  float freq = cellsZ / worldPeriod;
+  // 模様を上に流すにはルックアップ位置を下にずらす
+  vec3 q = (p - vec3(0.0, 1.0, 0.0) * u_noiseSpeed * u_time) * freq;
+  float n = 0.5 * valueNoise(q, cellsZ) + 0.25 * valueNoise(q * 2.0, cellsZ * 2.0) + 0.125 * valueNoise(q * 4.0, cellsZ * 4.0);
+  return mix(u_noiseMin, u_noiseMax, n / 0.875);
+}
+
+// 視線に沿った kappa 重み付きのノイズ平均 R_bar (RGB)。
+// サンプルは d_k = 1 + s^k (k = 0 は d = 1) でカメラの近くに固め、重みは kappa だけ (区間の幅はかけない)。
+// 幅をかけると遠い区間が重くなり、床の近くの終点側のサンプルが支配してノイズがサーフェスに張り付く。
+// 距離 d を超えた最初のサンプルは、区間のうち d までの割合で lerp して入れる (d について連続になる)
+const int NOISE_SAMPLES = 10;
+const float NOISE_STEP_EXP = 1.4;
+vec3 noiseMean(vec3 c, vec3 rd, float d) {
+  vec3 sum = vec3(0.0);
+  vec3 wsum = vec3(0.0);
+  float t = 1.0;
+  float tPrev = 0.0;
+  float step = NOISE_STEP_EXP;
+  for (int k = 0; k < NOISE_SAMPLES; k++) {
+    vec3 p = c + rd * t;
+    vec3 w = u_density * exp(-u_falloff * (p.y - u_baseHeight)) + u_uniformDensity + vec3(1e-6);
+    vec3 f = w * fogNoise(p);
+    if (k > 0 && t > d) {
+      float ratio = (d - tPrev) / (t - tPrev);
+      return mix(sum / wsum, (sum + f) / (wsum + w), ratio);
+    }
+    sum += f;
+    wsum += w;
+    tPrev = t;
+    t = 1.0 + step;
+    step *= NOISE_STEP_EXP;
+  }
+  return sum / wsum;
+}
+
 // 太陽の円。視線と太陽の向きの角度で描き、縁は少しだけぼかす。フォグは空と同じく視線の透過率で薄まる
 const float SUN_RADIUS = radians(1.5);
 const float SUN_SOFT = radians(0.3);
@@ -339,7 +414,9 @@ void main() {
   }
 
   vec3 T = fogTransmittance(ro, rd, d);
-  // 内散乱 = 環境光 × 散乱アルベド × (1 - T) (Pickles の fogColor = ambient * albedo と同じ形) + 太陽の単散乱。
+  // ノイズは視線の透過率にだけかける (T~ = T^R_bar)。太陽の内散乱やサーフェスの環境光は閉じた式のまま
+  if (u_noise) T = pow(T, noiseMean(ro, rd, d));
+  // 内散乱 = 環境光 × 散乱アルベド × (1 - T) + 太陽の単散乱。
   // 高さフォグと距離フォグで albedo や emission が違うときは、散乱する量の比で混ぜる
   vec3 wa, wb;
   fogScatterWeights(ro, rd, d, wa, wb);

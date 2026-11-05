@@ -56,6 +56,11 @@ const uniformNames = [
   'u_ambientFog',
   'u_emissionAmbient',
   'u_volumetricShadow',
+  'u_noise',
+  'u_noiseScale',
+  'u_noiseMin',
+  'u_noiseMax',
+  'u_noiseSpeed',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -85,6 +90,15 @@ export type FogRenderer = {
   emissionAmbient: boolean
   /** 太陽光の内散乱で柱と床の影を見る (視線をレイマーチして数値積分。重い)。sunScatter のときだけ効く */
   volumetricShadow: boolean
+  /** 消散係数に 3D ノイズをかける (Pickles Note の Noise。視線の透過率にだけ効く) */
+  noise: boolean
+  /** ノイズの周波数 (1/長さ)。z 方向はワールドの周期で割り切れる値に丸める */
+  noiseScale: number
+  /** ノイズの下限と上限。r = mix(noiseMin, noiseMax, fbm) */
+  noiseMin: number
+  noiseMax: number
+  /** ノイズの流れる速さ (長さ/秒) */
+  noiseSpeed: number
   start(): void
   stop(): void
   dispose(): void
@@ -194,6 +208,11 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)
     gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
     gl.uniform1i(loc.u_volumetricShadow, renderer.volumetricShadow ? 1 : 0)
+    gl.uniform1i(loc.u_noise, renderer.noise ? 1 : 0)
+    gl.uniform1f(loc.u_noiseScale, renderer.noiseScale)
+    gl.uniform1f(loc.u_noiseMin, renderer.noiseMin)
+    gl.uniform1f(loc.u_noiseMax, renderer.noiseMax)
+    gl.uniform1f(loc.u_noiseSpeed, renderer.noiseSpeed)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }
@@ -245,6 +264,11 @@ export const createFogRenderer = (
     ambientFog: false,
     emissionAmbient: false,
     volumetricShadow: false,
+    noise: false,
+    noiseScale: 0.15,
+    noiseMin: 0,
+    noiseMax: 1,
+    noiseSpeed: 0.5,
     start() {
       if (running) return
       running = true
