@@ -20,6 +20,7 @@ export const controlPresets = {
   albedo: { key: 'albedo', mode: 'color', label: 'albedo' },
   uniformAlbedo: { key: 'uniformAlbedo', mode: 'color', label: 'albedo' },
   emission: { key: 'emission', mode: 'color', label: 'emission' },
+  uniformEmission: { key: 'uniformEmission', mode: 'color', label: 'emission' },
   lightColor: { key: 'lightColor', mode: 'color', label: 'sun color' },
 } satisfies Record<string, ControlSpec>
 

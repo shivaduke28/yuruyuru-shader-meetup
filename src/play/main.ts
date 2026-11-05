@@ -82,18 +82,22 @@ scene.addBinding(renderer, 'pillarHeight', { label: 'cube height', min: 0.5, max
 
 // フォルダはスライドの流れに揃える
 const heightFog = pane.addFolder({ title: 'Height Fog', expanded: true })
-bound.addControls(heightFog, [controlPresets.densityRGB, controlPresets.falloffRGB, controlPresets.baseHeightRGB, controlPresets.albedo])
+bound.addControls(heightFog, [
+  controlPresets.densityRGB,
+  controlPresets.falloffRGB,
+  controlPresets.baseHeightRGB,
+  controlPresets.albedo,
+  controlPresets.emission,
+])
 
 const distanceFog = pane.addFolder({ title: 'Distance Fog', expanded: true })
-bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo])
+bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo, controlPresets.uniformEmission])
 
-const fogColor = pane.addFolder({ title: 'Fog Color', expanded: true })
-bound.addControls(fogColor, [controlPresets.ambient, controlPresets.emission])
-
-const sun = pane.addFolder({ title: 'Sun', expanded: true })
-bound.addControls(sun, [controlPresets.lightColor])
-sun.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
-sun.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
+// 環境光と太陽はどちらのフォグにも共通なのでまとめる
+const light = pane.addFolder({ title: 'Light', expanded: true })
+bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
+light.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
+light.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない

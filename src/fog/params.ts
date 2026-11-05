@@ -16,8 +16,10 @@ export type FogParams = {
   albedo: Vec3
   /** 距離フォグ (uniformDensity) の散乱アルベド (0..1) */
   uniformAlbedo: Vec3
-  /** フォグ自体が発する光 */
+  /** 高さフォグ自体が発する光 */
   emission: Vec3
+  /** 距離フォグ (uniformDensity) 自体が発する光 */
+  uniformEmission: Vec3
   /** 平行光源 (太陽) の色 × 強さ */
   lightColor: Vec3
 }
@@ -31,6 +33,7 @@ export const defaultFogParams = (): FogParams => ({
   albedo: [1, 1, 1],
   uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
+  uniformEmission: [0, 0, 0],
   lightColor: [1.6, 1.45, 1.2],
 })
 
@@ -49,6 +52,7 @@ export const cloneParams = (p: FogParams): FogParams => ({
   albedo: [...p.albedo],
   uniformAlbedo: [...p.uniformAlbedo],
   emission: [...p.emission],
+  uniformEmission: [...p.uniformEmission],
   lightColor: [...p.lightColor],
 })
 
@@ -69,6 +73,7 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.albedo, from.albedo, to.albedo, t)
   lerpVec(out.uniformAlbedo, from.uniformAlbedo, to.uniformAlbedo, t)
   lerpVec(out.emission, from.emission, to.emission, t)
+  lerpVec(out.uniformEmission, from.uniformEmission, to.uniformEmission, t)
   lerpVec(out.lightColor, from.lightColor, to.lightColor, t)
 }
 

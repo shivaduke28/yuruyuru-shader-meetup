@@ -31,6 +31,7 @@ const uniformNames = [
   'u_albedo',
   'u_uniformAlbedo',
   'u_emission',
+  'u_uniformEmission',
   'u_colorful',
   'u_pillarHalfWidth',
   'u_pillarHeight',
@@ -157,6 +158,7 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_albedo, params.albedo)
     gl.uniform3fv(loc.u_uniformAlbedo, params.uniformAlbedo)
     gl.uniform3fv(loc.u_emission, params.emission)
+    gl.uniform3fv(loc.u_uniformEmission, params.uniformEmission)
     gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
     gl.uniform1f(loc.u_pillarHalfWidth, renderer.pillarHalfWidth)
     gl.uniform1f(loc.u_pillarHeight, renderer.pillarHeight)

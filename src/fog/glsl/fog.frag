@@ -16,7 +16,8 @@ uniform vec3 u_uniformDensity; // 高さに依存しない成分
 uniform vec3 u_ambient;        // 環境光。面のアンビエントとフォグの内散乱に使う
 uniform vec3 u_albedo;         // 高さフォグの散乱アルベド
 uniform vec3 u_uniformAlbedo;  // 距離フォグの散乱アルベド
-uniform vec3 u_emission;       // フォグ自体が発する光
+uniform vec3 u_emission;       // 高さフォグ自体が発する光
+uniform vec3 u_uniformEmission; // 距離フォグ自体が発する光
 uniform bool u_colorful;       // 柱の色をセルごとにランダムな色相にする
 uniform float u_pillarHalfWidth; // 柱の半分の幅 (セル 8 の中に収まる範囲)
 uniform float u_pillarHeight;    // 柱の高さ
@@ -193,16 +194,26 @@ void fogMixFactors(vec3 c, vec3 rd, float d, out vec3 heightFactor, out vec3 uni
   uniformFactor = 1.0 / (1.0 + min(tauH, vec3(1e4)));
 }
 
-// 視線に沿って 2 つのフォグが散乱する量の比で albedo を混ぜる。片方しかなければそのフォグの albedo
-vec3 mixedAlbedo(vec3 c, vec3 rd, float d) {
-  if (all(equal(u_uniformDensity, vec3(0.0)))) return u_albedo;
-  if (all(equal(u_density, vec3(0.0)))) return u_uniformAlbedo;
+// 視線に沿って 2 つのフォグが散乱する量 (高さフォグ a、距離フォグ b)。片方しかなければそのフォグだけ 1
+void fogScatterWeights(vec3 c, vec3 rd, float d, out vec3 a, out vec3 b) {
+  if (all(equal(u_uniformDensity, vec3(0.0)))) { a = vec3(1.0); b = vec3(0.0); return; }
+  if (all(equal(u_density, vec3(0.0)))) { a = vec3(0.0); b = vec3(1.0); return; }
   vec3 hf, uf;
   fogMixFactors(c, rd, d, hf, uf);
   vec3 tauH = heightFogOpticalDepth(c, rd, d, u_density, u_falloff, u_baseHeight);
-  vec3 a = (1.0 - exp(-min(tauH, vec3(60.0)))) * hf;
-  vec3 b = (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
-  return (u_albedo * a + u_uniformAlbedo * b) / max(a + b, vec3(1e-6));
+  a = (1.0 - exp(-min(tauH, vec3(60.0)))) * hf;
+  b = (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
+}
+
+// 高さフォグの値 h と距離フォグの値 u を散乱量の比で混ぜる。albedo にも emission (密度に比例するモデル) にも同じ重み
+vec3 mixByScatter(vec3 h, vec3 u, vec3 a, vec3 b) {
+  return (h * a + u * b) / max(a + b, vec3(1e-6));
+}
+
+vec3 mixedAlbedo(vec3 c, vec3 rd, float d) {
+  vec3 a, b;
+  fogScatterWeights(c, rd, d, a, b);
+  return mixByScatter(u_albedo, u_uniformAlbedo, a, b);
 }
 
 // 太陽光の単散乱 (等方)。位相関数 1/(4π) × 放射照度 π lightColor = lightColor / 4 が散乱の源。
@@ -263,10 +274,12 @@ void main() {
 
   vec3 T = fogTransmittance(ro, rd, d);
   // 内散乱 = 環境光 × 散乱アルベド × (1 - T) (Pickles の fogColor = ambient * albedo と同じ形) + 太陽の単散乱。
-  // 高さフォグと距離フォグで albedo が違うときは、散乱する量の比で混ぜる
-  vec3 inscatter = u_ambient * mixedAlbedo(ro, rd, d) * (1.0 - T);
+  // 高さフォグと距離フォグで albedo や emission が違うときは、散乱する量の比で混ぜる
+  vec3 wa, wb;
+  fogScatterWeights(ro, rd, d, wa, wb);
+  vec3 inscatter = u_ambient * mixByScatter(u_albedo, u_uniformAlbedo, wa, wb) * (1.0 - T);
   if (u_sunScatter) inscatter += sunInscatter(ro, rd, d, T);
-  col = col * T + inscatter + u_emission * (1.0 - T);
+  col = col * T + inscatter + mixByScatter(u_emission, u_uniformEmission, wa, wb) * (1.0 - T);
 
   col = pow(col, vec3(1.0 / 2.2));
   fragColor = vec4(col, 1.0);

@@ -25,7 +25,7 @@ play.html         Playground (src/play/)
 src/fog/          スライドと Playground が共有する部分
   glsl/fog.frag   フルスクリーンレイマーチ + 指数関数高さフォグ。主役の関数は heightFogOpticalDepth
   glsl/fullscreen.vert
-  params.ts       FogParams (density/falloff/baseHeight/uniformDensity/ambient/albedo/uniformAlbedo/emission/lightColor、すべて Vec3) と Camera
+  params.ts       FogParams (density/falloff/baseHeight/uniformDensity/ambient/albedo/uniformAlbedo/emission/uniformEmission/lightColor、すべて Vec3) と Camera
   renderer.ts     WebGL2 の描画ループ、カメラ、ドラッグ・ホイール操作
   controls.ts     Tweakpane のバインディング。controlPresets にスライダーの定義
 src/slides/
@@ -53,7 +53,8 @@ src/style.css     スライド・Playground・トップのスタイル
   スライダーの表示は `live`、操作は `target` に書く。スライダー操作時はトゥイーンせず即反映
 - Tweakpane の `refresh()` は change イベントを同期で投げる。`refreshing` フラグの間はユーザー操作として扱わない
 - `ambient` は環境光で、面のアンビエントにもフォグの内散乱にも使う。`albedo` は高さフォグ、`uniformAlbedo` は距離フォグの散乱アルベド (RGB、0..1)。
-  両方あるときは視線に沿って散乱する量の比で混ぜる (fog.frag の `mixedAlbedo`、`fogMixFactors` の近似を使う)。
+  両方あるときは視線に沿って散乱する量の比で混ぜる (fog.frag の `fogScatterWeights` + `mixByScatter`、`fogMixFactors` の近似を使う)。
+  `emission` は高さフォグ、`uniformEmission` は距離フォグの発光で、albedo と同じ重みで混ぜる（Playground では各フォグのフォルダに置く。スライドは `emission` のみ）。
   フォグの色 = `ambient * albedo + emission`（Pickles の `Ls * scatteringAlbedo + _Emission` と同じ形）。発光は面のアンビエントには足さない
 - 発光を散乱と同じ重みで足すのは、エミッションを密度に比例させたモデル（L_e = E·κ）として読めば厳密
 - 配色は環境光が暗めのグレー (0.25)、太陽が暖色で環境光より明るい (1.6, 1.45, 1.2)、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
