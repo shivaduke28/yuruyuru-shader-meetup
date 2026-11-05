@@ -2,7 +2,7 @@ import '../style.css'
 import { Pane } from 'tweakpane'
 import { createFogRenderer, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, MIN_SUN_ELEVATION } from '../fog/renderer'
 import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
-import { controlPresets, createFogPane } from '../fog/controls'
+import { controlPresets, createFogPane, folderHelp, withHelp } from '../fog/controls'
 
 const canvas = document.getElementById('canvas') as HTMLCanvasElement
 const paneTopEl = document.getElementById('pane-top') as HTMLElement
@@ -32,13 +32,12 @@ const presets: Record<string, Preset> = {
     },
   },
   uniform: { params: { density: [0, 0, 0], uniformDensity: [0.02, 0.02, 0.02] } },
-  // 水: 赤から順に吸われ、散乱は青寄り、環境光は暗めの青
+  // 水: 赤から順に吸われ、環境光は暗めの青 (フォグもサーフェスも青く沈む)
   water: {
     params: {
       density: [0, 0, 0],
       uniformDensity: [0.16, 0.08, 0.04],
-      uniformAlbedo: [0.1, 0.4, 0.7],
-      ambient: [0.2, 0.3, 0.45],
+      ambient: [0.1, 0.25, 0.45],
     },
   },
   // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽はフォグの中で減衰して散乱、奥がうっすら光る
@@ -82,21 +81,33 @@ const refreshAll = () => {
 }
 
 const presetState = { preset: 'plain' }
-topPane
-  .addBinding(presetState, 'preset', {
+withHelp(
+  topPane.addBinding(presetState, 'preset', {
     label: 'preset',
     options: Object.fromEntries(Object.keys(presets).map((k) => [k, k])),
-  })
-  .on('change', (ev) => {
-    applyPreset(presets[ev.value])
-    refreshAll()
-  })
+  }),
+  'フォグのパラメータとトグルの組み合わせ。Noise / Scene / Camera は変えない',
+).on('change', (ev) => {
+  applyPreset(presets[ev.value])
+  refreshAll()
+})
+// 描画解像度はウィンドウの物理ピクセルに対する倍率。絵ではなく機械の都合なので Reset では触らない
+withHelp(
+  topPane.addBinding(renderer, 'resolutionScale', {
+    label: 'resolution',
+    options: { 'x1': 1, 'x1/2': 0.5, 'x1/4': 0.25 },
+  }),
+  '描画解像度。ウィンドウの物理ピクセルに対する倍率。重いときに下げる',
+)
 
-// フォルダはスライドの流れに揃える: 距離フォグ → 高さフォグ → 光 → 追加要素 → 舞台
+// フォルダはスライドの流れに揃える: 距離フォグ → 高さフォグ → 光源 → 追加要素 → 舞台
+// 距離フォグは density だけで光と相互作用しない。光との相互作用のトグルは全部高さフォグのものなので Height Fog に置く
 const distanceFog = pane.addFolder({ title: 'Distance Fog', expanded: true })
-bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo, controlPresets.uniformEmission])
+folderHelp(distanceFog, '高さに依らない一様なフォグ。無限に広がるので空の色 = フォグの色 = ambient。光とは相互作用しない')
+bound.addControls(distanceFog, [controlPresets.uniformRGB])
 
 const heightFog = pane.addFolder({ title: 'Height Fog', expanded: true })
+folderHelp(heightFog, '高さとともに指数関数で薄くなるフォグ。フォグの色 = ambient × albedo + emission。光との相互作用のトグルもここ')
 bound.addControls(heightFog, [
   controlPresets.densityRGB,
   controlPresets.falloffRGB,
@@ -104,28 +115,44 @@ bound.addControls(heightFog, [
   controlPresets.albedo,
   controlPresets.emission,
 ])
+withHelp(
+  heightFog.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }),
+  '高さフォグが環境光をサーフェスへ散乱する。サーフェスの環境光がフォグの色に近づく (albedo が 1 なら変わらない)',
+).on('change', applyToggles)
+withHelp(
+  heightFog.addBinding(toggles, 'fogSun', { label: 'fog on sun' }),
+  '高さフォグが太陽光を減衰・散乱する。サーフェスに届く太陽光の減衰、視線への内散乱、サーフェスへの散乱光をまとめてオンオフ',
+).on('change', applyToggles)
+withHelp(
+  heightFog.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }),
+  '太陽光の内散乱で柱の影を見る (光芒)。fog on sun のときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い',
+).on('change', applyToggles)
+withHelp(
+  heightFog.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }),
+  '高さフォグの発光がサーフェスにも届く。空へ向かう代表方向の emission × (1 - T) をサーフェスの環境光に足す',
+).on('change', applyToggles)
 
-// 環境光と太陽はどちらのフォグにも共通
-const ambientLight = pane.addFolder({ title: 'Ambient Light', expanded: true })
-bound.addControls(ambientLight, [{ ...controlPresets.ambient, label: 'color' }])
-ambientLight.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
-ambientLight.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }).on('change', applyToggles)
-
-const sunLight = pane.addFolder({ title: 'Sun Light', expanded: true })
-bound.addControls(sunLight, [{ ...controlPresets.lightColor, label: 'color' }])
-sunLight.addBinding(renderer, 'sunAzimuth', { label: 'azimuth', min: -180, max: 180, step: 1 })
-sunLight.addBinding(renderer, 'sunElevation', { label: 'elevation', min: MIN_SUN_ELEVATION, max: 90, step: 1 })
-sunLight.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
-// fog on sun がオンのときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い
-sunLight.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }).on('change', applyToggles)
+// 光源は色と向きだけ
+const lights = pane.addFolder({ title: 'Lights', expanded: true })
+folderHelp(lights, '光源。環境光は全方向から同じ色、太陽は平行光源')
+bound.addControls(lights, [controlPresets.ambient, controlPresets.lightColor])
+withHelp(
+  lights.addBinding(renderer, 'sunAzimuth', { label: 'sun azimuth', min: -180, max: 180, step: 1 }),
+  '太陽の方位 (度)。0 でカメラの正面 (+z)。既定はカメラの後ろ',
+)
+withHelp(
+  lights.addBinding(renderer, 'sunElevation', { label: 'sun elevation', min: MIN_SUN_ELEVATION, max: 90, step: 1 }),
+  '太陽の仰角 (度)。下限 5 度 (0 だと太陽の透過率が発散する)',
+)
 
 // 消散係数に 3D ノイズをかける (Pickles Note の Noise)。視線の透過率にだけ効く
 const noise = pane.addFolder({ title: 'Noise', expanded: true })
+folderHelp(noise, 'フォグ (距離 + 高さ) の消散係数に 3D ノイズをかける。視線の透過率にだけ効き、太陽や環境光の計算は閉じた式のまま')
 noise.addBinding(renderer, 'noise', { label: 'enabled' })
-noise.addBinding(renderer, 'noiseScale', { label: 'scale', min: 0.02, max: 3, step: 0.01 })
-noise.addBinding(renderer, 'noiseMin', { label: 'min', min: 0, max: 2, step: 0.01 })
-noise.addBinding(renderer, 'noiseMax', { label: 'max', min: 0, max: 2, step: 0.01 })
-noise.addBinding(renderer, 'noiseSpeed', { label: 'speed', min: 0, max: 5, step: 0.1 })
+withHelp(noise.addBinding(renderer, 'noiseScale', { label: 'scale', min: 0.02, max: 3, step: 0.01 }), 'ノイズの空間周波数。大きいほど細かい')
+withHelp(noise.addBinding(renderer, 'noiseMin', { label: 'min', min: 0, max: 2, step: 0.01 }), '消散係数にかける倍率の下限。倍率 = mix(min, max, ノイズ)')
+withHelp(noise.addBinding(renderer, 'noiseMax', { label: 'max', min: 0, max: 2, step: 0.01 }), '消散係数にかける倍率の上限。倍率 = mix(min, max, ノイズ)')
+withHelp(noise.addBinding(renderer, 'noiseSpeed', { label: 'speed', min: 0, max: 5, step: 0.1 }), 'ノイズが上向きに流れる速さ')
 
 const scene = pane.addFolder({ title: 'Scene', expanded: true })
 scene.addBinding(renderer, 'colorful', { label: 'colorful cubes' })
@@ -153,10 +180,9 @@ cam.addBinding(camera, 'speed', { min: 0, max: 20, step: 0.1 })
 cam.addBinding(camera, 'yaw', { min: -3.14, max: 3.14, step: 0.01 })
 cam.addBinding(camera, 'fov', { min: 20, max: 110, step: 1 })
 cam.addBinding(camera, 'pitch', { min: -1.4, max: 1.4, step: 0.01 })
-cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, label: 'resolution' })
 
-// Reset は Camera も含めて全部を既定に戻す
-topPane.addButton({ title: 'Reset' }).on('click', () => {
+// Reset は Camera も含めて全部を既定に戻す (resolution は除く)
+withHelp(topPane.addButton({ title: 'Reset' }), 'Camera も含めて全部を既定に戻す (resolution は除く)').on('click', () => {
   presetState.preset = 'plain'
   applyPreset(presets.plain)
   renderer.colorful = false
@@ -169,7 +195,6 @@ topPane.addButton({ title: 'Reset' }).on('click', () => {
   renderer.noiseMin = 0
   renderer.noiseMax = 1
   renderer.noiseSpeed = 0.5
-  renderer.resolutionScale = 1
   const c = defaultCamera()
   camera.position[0] = c.position[0]
   camera.position[1] = c.position[1]

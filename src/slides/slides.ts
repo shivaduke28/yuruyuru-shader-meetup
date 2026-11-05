@@ -51,7 +51,6 @@ const plain: Partial<FogParams> = {
   uniformDensity: [0, 0, 0],
   ambient,
   albedo: [1, 1, 1],
-  uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
 }
@@ -63,7 +62,6 @@ const rgb: Partial<FogParams> = {
   uniformDensity: [0, 0, 0],
   ambient,
   albedo: [1, 1, 1],
-  uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
 }
@@ -83,28 +81,28 @@ const none: Partial<FogParams> = {
 const code = (s: string) =>
   `<pre><code class="hljs language-glsl">${hljs.highlight(s, { language: 'glsl' }).value}</code></pre>`
 
-const uniformControls = [controlPresets.ambient, controlPresets.uniform, controlPresets.uniformAlbedo]
+const uniformControls = [controlPresets.ambient, controlPresets.uniform]
 // フォグの形のパラメータと、色のパラメータを別のカードに分ける
 const heightControls = [
   [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
   [controlPresets.ambient, controlPresets.albedo],
 ]
 
-const distanceFogCode = code(`vec3 fogColor = ambient * albedo;
+// 距離フォグの色は環境光そのもの (無限に広がる一様フォグでは空の色 = フォグの色)
+const distanceFogCode = code(`vec3 fogColor = ambient;
 float t = exp(-density * dist);
 color = mix(fogColor, color, t);`)
 
 const uniformVariation = (
   id: string,
   fog: number,
-  albedo: [number, number, number],
   body: string,
   ambientOverride: [number, number, number] = ambient,
 ): Slide => ({
   id,
   layout: 'demo',
   title: '距離フォグ',
-  params: { ...uniform, uniformDensity: [fog, fog, fog], uniformAlbedo: albedo, ambient: ambientOverride },
+  params: { ...uniform, uniformDensity: [fog, fog, fog], ambient: ambientOverride },
   controls: uniformControls,
   side: distanceFogCode,
   body: `<p>${body}</p>`,
@@ -186,26 +184,24 @@ export const slides: Slide[] = [
     body: `
       <ul>
         <li>density: フォグの濃さ（正確には消散係数。単位は 1/長さ）</li>
-        <li>albedo: フォグが環境光をどのくらい反射するか</li>
+        <li>ambient: 環境光。フォグの色は空の色と同じになる</li>
       </ul>`,
   },
-  uniformVariation('uniform-fog-thick', 0.15, [1, 1, 1], 'density を大きくすると、フォグが濃くなって近くしか見えない'),
-  uniformVariation('uniform-fog-thin', 0.01, [1, 1, 1], 'density を小さくすると、フォグが薄くなって遠くまで見える'),
-  uniformVariation('uniform-fog-color', 0.05, [1, 0, 0], 'albedo を変更すると、フォグの色が変わる'),
-  uniformVariation('uniform-fog-ambient', 0.05, [1, 1, 1], 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [1, 0, 0]),
+  uniformVariation('uniform-fog-thick', 0.15, 'density を大きくすると、フォグが濃くなって近くしか見えない'),
+  uniformVariation('uniform-fog-thin', 0.01, 'density を小さくすると、フォグが薄くなって遠くまで見える'),
+  uniformVariation('uniform-fog-ambient', 0.05, 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [1, 0, 0]),
   {
     id: 'uniform-fog-rgb',
     layout: 'demo',
     title: 'density を RGB にする',
-    // Playground の water プリセット: 赤から順に吸われ、散乱は青寄り、環境光は暗めの青
+    // Playground の water プリセット: 赤から順に吸われ、環境光は暗めの青
     params: {
       ...uniform,
       uniformDensity: [0.16, 0.08, 0.04],
-      uniformAlbedo: [0.1, 0.4, 0.7],
-      ambient: [0.2, 0.3, 0.45],
+      ambient: [0.1, 0.25, 0.45],
     },
-    controls: [controlPresets.ambient, controlPresets.uniformRGB, controlPresets.uniformAlbedo],
-    side: code(`vec3 fogColor = ambient * albedo;
+    controls: [controlPresets.ambient, controlPresets.uniformRGB],
+    side: code(`vec3 fogColor = ambient;
 vec3 t = exp(-density * dist); // density を vec3 にするだけ
 color = mix(fogColor, color, t);`),
     body: '<p>density を RGB ごとに変えると、距離によって色が変わる。水の中のように赤から順に吸われる</p>',
@@ -225,6 +221,7 @@ color = mix(fogColor, color, t);`),
         <li>density: 基準の高さでの濃さ</li>
         <li>falloff: 上に行くほど薄くなる速さ</li>
         <li>height: 基準の高さ</li>
+        <li>albedo: フォグが環境光をどのくらい反射するか。フォグの色 = ambient × albedo</li>
       </ul>`,
   },
   heightVariation('height-fog-density', { density: 0.3 }, 'density を小さくすると、全体が薄くなる'),

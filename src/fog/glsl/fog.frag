@@ -14,10 +14,8 @@ uniform vec3 u_falloff;        // f
 uniform vec3 u_baseHeight;     // h
 uniform vec3 u_uniformDensity; // 高さに依存しない成分
 uniform vec3 u_ambient;        // 環境光。面のアンビエントとフォグの内散乱に使う
-uniform vec3 u_albedo;         // 高さフォグの散乱アルベド
-uniform vec3 u_uniformAlbedo;  // 距離フォグの散乱アルベド
+uniform vec3 u_albedo;         // 高さフォグの散乱アルベド。距離フォグのアルベドは 1 (空の色 = フォグの色 = ambient)
 uniform vec3 u_emission;       // 高さフォグ自体が発する光
-uniform vec3 u_uniformEmission; // 距離フォグ自体が発する光
 uniform bool u_colorful;       // 柱の色をセルごとにランダムな色相にする
 uniform float u_pillarHalfWidth; // 柱の半分の幅 (セル 8 の中に収まる範囲)
 uniform float u_pillarHeight;    // 柱の高さ
@@ -216,26 +214,21 @@ vec3 mixByScatter(vec3 h, vec3 u, vec3 a, vec3 b) {
   return (h * a + u * b) / max(a + b, vec3(1e-6));
 }
 
-vec3 mixedAlbedo(vec3 c, vec3 rd, float d) {
-  vec3 a, b;
-  fogScatterWeights(c, rd, d, a, b);
-  return mixByScatter(u_albedo, u_uniformAlbedo, a, b);
-}
-
 // 太陽光の単散乱 (等方)。位相関数 1/(4π) × 放射照度 π lightColor = lightColor / 4 が散乱の源。
-// 視線に沿って ∫ T_view(t) [albedo_h kappa_h(t) T_sun(t) + albedo_u kappa_u] dt を積分する。
-// T_sun = e^{-tau_h(t) / L.y} は高さフォグだけ (無限に広がる距離フォグは太陽を完全に遮ってしまうので、太陽は減衰させないと割り切る)。
-// 高さフォグの項は tau の指数関数なので s = -1 / L.y のモード積分、距離フォグの項は 1 - e^{-kappa_u d}。混ざるときは fogMixFactors
-vec3 sunInscatter(vec3 c, vec3 rd, float d, vec3 T) {
-  vec3 source = u_lightColor * 0.25;
-  if (!u_lightAttenuation) return source * mixedAlbedo(c, rd, d) * (1.0 - T);
+// 視線に沿って ∫ T_view(t) albedo_h kappa_h(t) T_sun(t) dt を積分する。高さフォグだけで、距離フォグは太陽光を散乱しない
+// (無限に広がる一様フォグの放射は ambient に含まれる。足すと密度がいくら小さくても lightColor / 4 に飽和して空やサーフェスが跳ぶ)。
+// T_sun = e^{-tau_h(t) / L.y} も高さフォグだけ (距離フォグは太陽を減衰させない)。
+// T_view には距離フォグも入る。積分は u_lightAttenuation なら s = -1 / L.y のモード積分、なければ 1 - T_h で、
+// 距離フォグの分は fogMixFactors の heightFactor で積分の外に出す近似
+vec3 sunInscatter(vec3 c, vec3 rd, float d) {
   vec3 tauCam, tauEnd, tauView;
   rayTaus(c, rd, d, tauCam, tauEnd, tauView);
   vec3 hf, uf;
   fogMixFactors(c, rd, d, hf, uf);
-  vec3 heightTerm = u_albedo * modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y) * hf;
-  vec3 uniformTerm = u_uniformAlbedo * (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
-  return source * (heightTerm + uniformTerm);
+  vec3 scatter = u_lightAttenuation
+    ? modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y)
+    : 1.0 - exp(-tauView);
+  return u_lightColor * 0.25 * u_albedo * scatter * hf;
 }
 
 // フォグの中の点 p から太陽への影 (柱だけ。床は上向きのレイを遮らない)。
@@ -273,13 +266,12 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
     float vis = fogShadow(p);
     if (vis <= 0.0) continue;
     vec3 kappaH = u_density * exp(-u_falloff * (p.y - u_baseHeight));
-    sum += Tview * (u_albedo * kappaH * sunTransmittance(p) + u_uniformAlbedo * u_uniformDensity) * (vis * dt);
+    sum += Tview * u_albedo * kappaH * sunTransmittance(p) * (vis * dt);
   }
   vec3 result = u_lightColor * 0.25 * sum;
   if (d > tEnd) {
     vec3 pEnd = c + rd * tEnd;
-    vec3 Trest = fogTransmittance(pEnd, rd, d - tEnd);
-    result += fogTransmittance(c, rd, tEnd) * sunInscatter(pEnd, rd, d - tEnd, Trest);
+    result += fogTransmittance(c, rd, tEnd) * sunInscatter(pEnd, rd, d - tEnd);
   }
   return result;
 }
@@ -289,17 +281,20 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
 // <T> の積分は閉じないので、空へ向かう代表方向 1 本 (仰角 cos = 2/3) の透過率で代表する。
 // 上向きの面の <T> = 2 E3(tau) を exp(-1.5 tau) で近似する diffusivity factor で、数値積分でも上向きの面はよく合う。
 // 側面は本当は下半分が地面まで濃いフォグを通るので暗めになるはずだが、地面やシーンの仮定を持ち込まないために同じ T を使う
-// 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱) は、同じ代表方向で太陽の内散乱を積分して足す。
 // 距離フォグは含めない (空まで無限に続くので T = 0 になってしまう)。albedo は高さフォグのもの
 const vec3 SKY_DIR = vec3(0.0, 2.0 / 3.0, 0.745356); // 長さ 1、y = 2/3
 vec3 skyTransmittance(vec3 p) {
   return exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
 }
 
-vec3 singleScatterAmbient(vec3 p, vec3 T) {
-  vec3 ambient = u_ambient * (1.0 - (1.0 - u_albedo) * (1.0 - T));
-  if (u_sunScatter) ambient += sunInscatter(p, SKY_DIR, 1e5, T);
-  return ambient;
+vec3 singleScatterAmbient(vec3 T) {
+  return u_ambient * (1.0 - (1.0 - u_albedo) * (1.0 - T));
+}
+
+// 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱)。同じ代表方向で太陽の内散乱を積分する。
+// u_sunScatter に付随する (太陽→フォグ→サーフェスの経路なので、環境光にフォグをかけるかとは独立)
+vec3 sunScatterAmbient(vec3 p) {
+  return sunInscatter(p, SKY_DIR, 1e5);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,11 +382,12 @@ vec3 shade(vec3 p, vec3 n) {
   vec3 ambient = u_ambient;
   if (u_ambientFog || u_emissionAmbient) {
     vec3 T = skyTransmittance(p);
-    if (u_ambientFog) ambient = singleScatterAmbient(p, T);
+    if (u_ambientFog) ambient = singleScatterAmbient(T);
     // 発光するフォグに囲まれたサーフェスには全方向から発光が届く。視線の内散乱と同じ形で代表方向の (1 - T) を重みにする。
     // 距離フォグの発光は空まで無限に続いて T = 0 になるので含めない (albedo と同じ割り切り)
     if (u_emissionAmbient) ambient += u_emission * (1.0 - T);
   }
+  if (u_sunScatter) ambient += sunScatterAmbient(p);
   return surfaceAlbedo(p) * (diff * sh * sun + ambient);
 }
 
@@ -419,11 +415,12 @@ void main() {
   // 高さフォグと距離フォグで albedo や emission が違うときは、散乱する量の比で混ぜる
   vec3 wa, wb;
   fogScatterWeights(ro, rd, d, wa, wb);
-  vec3 inscatter = u_ambient * mixByScatter(u_albedo, u_uniformAlbedo, wa, wb) * (1.0 - T);
-  if (u_sunScatter) inscatter += u_volumetricShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d, T);
-  col = col * T + inscatter + mixByScatter(u_emission, u_uniformEmission, wa, wb) * (1.0 - T);
-  // 太陽の円は高さフォグだけで減衰させる (太陽の減衰と同じ割り切り。無限に広がる距離フォグは太陽を完全に遮ってしまう)。
-  // 空の地の色は距離フォグ込みの T で沈むので、空が白く沈んでも太陽の円は見える
+  vec3 inscatter = u_ambient * mixByScatter(u_albedo, vec3(1.0), wa, wb) * (1.0 - T);
+  if (u_sunScatter) inscatter += u_volumetricShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d);
+  // 発光は高さフォグだけ (距離フォグの発光は ambient に含まれる) なので、散乱量の比で高さフォグの分だけ乗せる
+  col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 - T);
+  // 太陽の円は高さフォグだけで減衰させる。距離フォグの色は ambient そのもので空に合成しても空は変わらないので、
+  // 空にかかるのは高さフォグだけ。太陽の円も同じ扱いにする
   if (hit < 0.0) {
     vec3 Th = exp(-min(heightFogOpticalDepth(ro, rd, d, u_density, u_falloff, u_baseHeight), vec3(60.0)));
     col += u_lightColor * sunDisc(rd) * Th;

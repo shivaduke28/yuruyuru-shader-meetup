@@ -12,14 +12,11 @@ export type FogParams = {
   uniformDensity: Vec3
   /** 環境光。面のアンビエントにも、フォグの内散乱にも使う */
   ambient: Vec3
-  /** 高さフォグの散乱アルベド (0..1)。フォグの色 = ambient * albedo + emission */
+  /** 高さフォグの散乱アルベド (0..1)。フォグの色 = ambient * albedo + emission。
+   *  距離フォグにはアルベドがない (無限に広がる一様フォグでは空の色 = フォグの色なので、フォグの色 = ambient) */
   albedo: Vec3
-  /** 距離フォグ (uniformDensity) の散乱アルベド (0..1) */
-  uniformAlbedo: Vec3
-  /** 高さフォグ自体が発する光 */
+  /** 高さフォグ自体が発する光。距離フォグにはない (アルベドと同じ理由。無限に広がる一様フォグの放射 = ambient なので発光は ambient に含まれる) */
   emission: Vec3
-  /** 距離フォグ (uniformDensity) 自体が発する光 */
-  uniformEmission: Vec3
   /** 平行光源 (太陽) の色 × 強さ */
   lightColor: Vec3
 }
@@ -31,9 +28,7 @@ export const defaultFogParams = (): FogParams => ({
   uniformDensity: [0, 0, 0],
   ambient: [0.25, 0.25, 0.25], // 暗めのグレー。太陽は暖色 (slides.ts と揃える)
   albedo: [1, 1, 1],
-  uniformAlbedo: [1, 1, 1],
   emission: [0, 0, 0],
-  uniformEmission: [0, 0, 0],
   lightColor: [1.6, 1.45, 1.2],
 })
 
@@ -50,9 +45,7 @@ export const cloneParams = (p: FogParams): FogParams => ({
   uniformDensity: [...p.uniformDensity],
   ambient: [...p.ambient],
   albedo: [...p.albedo],
-  uniformAlbedo: [...p.uniformAlbedo],
   emission: [...p.emission],
-  uniformEmission: [...p.uniformEmission],
   lightColor: [...p.lightColor],
 })
 
@@ -71,9 +64,7 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.uniformDensity, from.uniformDensity, to.uniformDensity, t)
   lerpVec(out.ambient, from.ambient, to.ambient, t)
   lerpVec(out.albedo, from.albedo, to.albedo, t)
-  lerpVec(out.uniformAlbedo, from.uniformAlbedo, to.uniformAlbedo, t)
   lerpVec(out.emission, from.emission, to.emission, t)
-  lerpVec(out.uniformEmission, from.uniformEmission, to.uniformEmission, t)
   lerpVec(out.lightColor, from.lightColor, to.lightColor, t)
 }
 
