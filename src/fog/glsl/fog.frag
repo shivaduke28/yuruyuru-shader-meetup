@@ -25,6 +25,7 @@ uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
 uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
 uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す。u_lightAttenuation なら深さで減衰
 uniform bool u_ambientFog;     // サーフェスの環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))
+uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -240,8 +241,11 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d, vec3 T) {
 // 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱) は、同じ代表方向で太陽の内散乱を積分して足す。
 // 距離フォグは含めない (空まで無限に続くので T = 0 になってしまう)。albedo は高さフォグのもの
 const vec3 SKY_DIR = vec3(0.0, 2.0 / 3.0, 0.745356); // 長さ 1、y = 2/3
-vec3 singleScatterAmbient(vec3 p) {
-  vec3 T = exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
+vec3 skyTransmittance(vec3 p) {
+  return exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
+}
+
+vec3 singleScatterAmbient(vec3 p, vec3 T) {
   vec3 ambient = u_ambient * (1.0 - (1.0 - u_albedo) * (1.0 - T));
   if (u_sunScatter) ambient += sunInscatter(p, SKY_DIR, 1e5, T);
   return ambient;
@@ -251,7 +255,14 @@ vec3 shade(vec3 p, vec3 n) {
   float diff = max(dot(n, LIGHT_DIR), 0.0);
   float sh = shadow(p + n * 0.02, LIGHT_DIR);
   vec3 sun = u_lightColor * sunTransmittance(p);
-  vec3 ambient = u_ambientFog ? singleScatterAmbient(p) : u_ambient;
+  vec3 ambient = u_ambient;
+  if (u_ambientFog || u_emissionAmbient) {
+    vec3 T = skyTransmittance(p);
+    if (u_ambientFog) ambient = singleScatterAmbient(p, T);
+    // 発光するフォグに囲まれたサーフェスには全方向から発光が届く。視線の内散乱と同じ形で代表方向の (1 - T) を重みにする。
+    // 距離フォグの発光は空まで無限に続いて T = 0 になるので含めない (albedo と同じ割り切り)
+    if (u_emissionAmbient) ambient += u_emission * (1.0 - T);
+  }
   return surfaceAlbedo(p) * (diff * sh * sun + ambient);
 }
 

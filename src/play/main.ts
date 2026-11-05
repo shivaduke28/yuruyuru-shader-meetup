@@ -50,10 +50,11 @@ const presets: Record<string, Preset> = {
 }
 
 // トグルはスライドと同じ現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
-const toggles = { fogAmbient: false, fogSun: false }
+const toggles = { fogAmbient: false, fogSun: false, emissionAmbient: false }
 const applyToggles = () => {
   renderer.ambientFog = toggles.fogAmbient
   renderer.lightAttenuation = renderer.sunScatter = toggles.fogSun
+  renderer.emissionAmbient = toggles.emissionAmbient
 }
 
 const bound = createFogPane(paneEl, params, [])
@@ -98,6 +99,7 @@ const light = pane.addFolder({ title: 'Light', expanded: true })
 bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
 light.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
 light.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
+light.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }).on('change', applyToggles)
 
 const cam = pane.addFolder({ title: 'Camera', expanded: false })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
@@ -125,7 +127,7 @@ cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, lab
 pane.addButton({ title: 'Reset' }).on('click', () => {
   assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
-  toggles.fogAmbient = toggles.fogSun = false
+  toggles.fogAmbient = toggles.fogSun = toggles.emissionAmbient = false
   applyToggles()
   renderer.colorful = false
   renderer.pillarHalfWidth = 0.7

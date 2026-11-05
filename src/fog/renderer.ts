@@ -39,6 +39,7 @@ const uniformNames = [
   'u_lightAttenuation',
   'u_sunScatter',
   'u_ambientFog',
+  'u_emissionAmbient',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -60,6 +61,8 @@ export type FogRenderer = {
   sunScatter: boolean
   /** サーフェスの環境光にフォグを単散乱で適用する */
   ambientFog: boolean
+  /** サーフェスの環境光に高さフォグの発光を足す */
+  emissionAmbient: boolean
   start(): void
   stop(): void
   dispose(): void
@@ -166,6 +169,7 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
     gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
     gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)
+    gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }
@@ -213,6 +217,7 @@ export const createFogRenderer = (
     lightAttenuation: false,
     sunScatter: false,
     ambientFog: false,
+    emissionAmbient: false,
     start() {
       if (running) return
       running = true

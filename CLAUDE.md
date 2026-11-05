@@ -55,11 +55,12 @@ src/style.css     スライド・Playground・トップのスタイル
 - `ambient` は環境光で、面のアンビエントにもフォグの内散乱にも使う。`albedo` は高さフォグ、`uniformAlbedo` は距離フォグの散乱アルベド (RGB、0..1)。
   両方あるときは視線に沿って散乱する量の比で混ぜる (fog.frag の `fogScatterWeights` + `mixByScatter`、`fogMixFactors` の近似を使う)。
   `emission` は高さフォグ、`uniformEmission` は距離フォグの発光で、albedo と同じ重みで混ぜる（Playground では各フォグのフォルダに置く。スライドは `emission` のみ）。
-  フォグの色 = `ambient * albedo + emission`（Pickles の `Ls * scatteringAlbedo + _Emission` と同じ形）。発光は面のアンビエントには足さない
+  フォグの色 = `ambient * albedo + emission`（Pickles の `Ls * scatteringAlbedo + _Emission` と同じ形）。
+  発光は既定では面のアンビエントに足さない。renderer の `emissionAmbient`（Playground の emission on surface）を入れると、空へ向かう代表方向の `emission * (1 - T)` を足す（高さフォグのみ）
 - 発光を散乱と同じ重みで足すのは、エミッションを密度に比例させたモデル（L_e = E·κ）として読めば厳密
 - 配色は環境光が暗めのグレー (0.25)、太陽が暖色で環境光より明るい (1.6, 1.45, 1.2)、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
 - 高さフォグのスライド 11〜14 は `plain` を基準に 1 枚 1 パラメータだけ変える（`heightVariation` に変えるものだけ渡す）
-- renderer のフラグは `lightAttenuation`（サーフェスに届く太陽光の減衰）、`sunScatter`（太陽光の内散乱）、`ambientFog`（サーフェスの環境光にフォグを単散乱で適用）の 3 つ。
+- renderer のフラグは `lightAttenuation`（サーフェスに届く太陽光の減衰）、`sunScatter`（太陽光の内散乱）、`ambientFog`（サーフェスの環境光にフォグを単散乱で適用）、`emissionAmbient`（サーフェスの環境光にフォグの発光を足す。Playground のみ）の 4 つ。
   スライドも Playground も現象ごとに `fogAmbient`（= ambientFog）と `fogSun`（= lightAttenuation + sunScatter をまとめて）で切り替える。
   太陽の減衰・カメラへの内散乱・サーフェスへの内散乱（`ambientFog` のとき、代表方向で `sunInscatter` を積分して環境光に足す。太陽→フォグ→サーフェスはフォグの散乱 1 回なので単散乱）は
   エネルギーの帳尻が合うように必ずまとめてオンオフする
