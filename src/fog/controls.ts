@@ -77,6 +77,8 @@ const bindVec3 = (
   }
 }
 
+const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+
 const bindColor = (
   folder: FolderApi | Pane,
   display: Vec3,
@@ -93,6 +95,10 @@ const bindColor = (
     onUserChange()
   })
   return () => {
+    // 値が同じなら書き戻さない。無彩色 (gray / white / black) は RGB に hue の情報がないので、
+    // 書き戻すたびにピッカーの hue が 0 に戻ってしまう (S や V を触らずに hue だけ動かすと元に戻るバグ)
+    const c = o.c
+    if (near(c.r, display[0]) && near(c.g, display[1]) && near(c.b, display[2])) return
     o.c = { r: display[0], g: display[1], b: display[2] }
     refreshQuietly([b])
   }
