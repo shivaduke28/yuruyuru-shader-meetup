@@ -262,10 +262,13 @@ float fogShadow(vec3 p) {
 // 被積分関数は sunInscatter と同じ T_view [albedo_h kappa_h T_sun + albedo_u kappa_u] に影の可視性をかけたもの。
 // 等間隔の矩形則で、縞にならないようピクセルごとのハッシュで開始位置をずらす (時間では変えない)。
 // 視線の透過率がほぼ 0 になったら打ち切る。SHADOW_RANGE より先は影を無視して閉じた式 (sunInscatter) に切り替え、手前の透過率をかけて足す。
-// 1 ピクセルあたり最大 SHADOW_STEPS 本の影のレイを飛ばすので重い。Playground の resolution で調整する
+// 1 ピクセルあたり最大 SHADOW_STEPS 本の影のレイを飛ばすので重い。Playground の resolution で調整する。
+// R はノイズの平均 (ノイズなしなら 1)。合成で視線の透過率を T^R にしているのと揃えて、march の中でも濃さに R をかけ、
+// 視線の透過率を T^R にする (視線 1 本で 1 つの値なので、光芒の筋の中にムラの形は出ない。筋全体が明るくなったり暗くなったりするだけ)。
+// 太陽への透過率はノイズを見ない (閉じた式側と同じ)
 const int SHADOW_STEPS = 32;
 const float SHADOW_RANGE = 48.0;
-vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
+vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix, vec3 R) {
   float tEnd = min(d, SHADOW_RANGE);
   float dt = tEnd / float(SHADOW_STEPS);
   float jitter = hash21(pix);
@@ -273,17 +276,17 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
   for (int i = 0; i < SHADOW_STEPS; i++) {
     float t = (float(i) + jitter) * dt;
     vec3 p = c + rd * t;
-    vec3 Tview = fogTransmittance(c, rd, t);
+    vec3 Tview = pow(fogTransmittance(c, rd, t), R);
     if (max(Tview.r, max(Tview.g, Tview.b)) < 0.005) break;
     float vis = fogShadow(p);
     if (vis <= 0.0) continue;
-    vec3 kappaH = u_density * exp(-u_falloff * (p.y - u_baseHeight));
+    vec3 kappaH = R * u_density * exp(-u_falloff * (p.y - u_baseHeight));
     sum += Tview * u_albedo * kappaH * sunTransmittance(p) * (vis * dt);
   }
   vec3 result = u_lightColor * sunPhase(dot(rd, u_lightDir)) * sum;
   if (d > tEnd) {
     vec3 pEnd = c + rd * tEnd;
-    result += fogTransmittance(c, rd, tEnd) * sunInscatter(pEnd, rd, d - tEnd);
+    result += pow(fogTransmittance(c, rd, tEnd), R) * sunInscatter(pEnd, rd, d - tEnd);
   }
   return result;
 }
@@ -424,14 +427,15 @@ void main() {
   }
 
   vec3 T = fogTransmittance(ro, rd, d);
-  // ノイズは視線の透過率にだけかける (T~ = T^R_bar)。太陽の内散乱やサーフェスの環境光は閉じた式のまま
-  if (u_noise) T = pow(T, noiseMean(ro, rd, d));
+  // ノイズは視線の透過率にかける (T~ = T^R_bar)。光芒の march にも同じ R を渡す。閉じた式の太陽の内散乱とサーフェスの環境光はノイズを見ない
+  vec3 R = u_noise ? noiseMean(ro, rd, d) : vec3(1.0);
+  T = pow(T, R);
   // 内散乱 = 環境光 × 散乱アルベド × (1 - T) + 太陽の単散乱。
   // 高さフォグと距離フォグで albedo や emission が違うときは、散乱する量の比で混ぜる
   vec3 wa, wb;
   fogScatterWeights(ro, rd, d, wa, wb);
   vec3 inscatter = u_ambient * mixByScatter(u_albedo, vec3(1.0), wa, wb) * (1.0 - T);
-  if (u_sunInscatter) inscatter += u_sunInscatterShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d);
+  if (u_sunInscatter) inscatter += u_sunInscatterShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy, R) : sunInscatter(ro, rd, d);
   // 発光は高さフォグだけ (距離フォグの発光は ambient に含まれる) なので、散乱量の比で高さフォグの分だけ乗せる
   col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 - T);
   // 太陽の円は高さフォグだけで減衰させる。距離フォグの色は ambient そのもので空に合成しても空は変わらないので、

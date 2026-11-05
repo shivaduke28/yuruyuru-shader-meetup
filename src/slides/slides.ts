@@ -449,16 +449,6 @@ T = pow(T, R / w);                   // 平均で透過率を変える`),
       </ul>`,
   },
   {
-    id: 'extras',
-    layout: 'text',
-    title: 'その先',
-    body: `
-      <ul>
-        <li>点光源の散乱</li>
-      </ul>`,
-    params: rgb,
-  },
-  {
     id: 'end',
     layout: 'text',
     title: 'おわり',
