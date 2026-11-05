@@ -46,6 +46,12 @@ src/style.css     スライド・Playground・トップのスタイル
 - コードブロックは折り返さない（長い行は縮小で収める）
 - レイアウトは 2 種類: `demo`（見出し + デモ + 右カラム + 本文）と `text`（見出し + 本文）。text でも本文はデモと同じ上端から始める
 
+### Playground のペイン
+
+- 上のカード（preset / Reset）は固定、下のカードは `max-height: calc(100vh - 32px)` の中でスクロールする。フォルダが増えても設計は変えない
+- フォルダの並びはスライドの流れ: Distance Fog → Height Fog → Ambient Light → Sun Light → Noise → Scene → Camera
+- preset はフォグのパラメータと 4 つのトグルを決める（Scene / Noise / Camera は触らない）。Reset は Camera も含めて全部を既定に戻す
+
 ### パラメータの扱い
 
 - FogParams の配列を `Object.assign` で差し替えない。Tweakpane が配列を参照しているので壊れる。必ず `assignParams` で値を書き込む
@@ -92,7 +98,8 @@ src/style.css     スライド・Playground・トップのスタイル
 
 - y = 0 の床 + xz に 8 間隔で並ぶ高さ固定の柱（幅と高さは renderer の `pillarHalfWidth` / `pillarHeight`。既定 0.7 / 12。Playground の Scene で変えられる）。柱はセル中央で対称なので mod で繰り返しても SDF は正しい（高さをセルごとに変えるならグリッドトラバーサルが必要になる）
 - カメラは +z に進み続ける。柱の列は x = 4 + 8k なので、初期位置は x = 0（列の間）
-- 空は環境光 + 太陽の円（fog.frag の `sunDisc`、半径 1.5 度、色は lightColor）。既定の太陽はカメラの後ろなので、Playground で azimuth を 0 付近にすると見える
+- 空は環境光 + 太陽の円（fog.frag の `sunDisc`、半径 1.5 度、色は lightColor）。既定の太陽はカメラの後ろなので、Playground で azimuth を 0 付近にすると見える。
+  太陽の円は高さフォグだけで減衰させる（太陽の減衰と同じ割り切り。空は d = 1e5 なので距離フォグを入れると密度がいくら小さくても消える）。空の地の色は距離フォグ込みで沈む
 - ライトは既定で順光（カメラの後ろ上、(0.3, 0.7, −0.6)）、ハードシャドウ。影のレイには最小歩幅を入れて表面すれすれでの stall を防ぐ。
   向きは renderer の `sunAzimuth` / `sunElevation`（度）で `u_lightDir` に渡す。仰角は 5 度を下限にする（0 だと太陽の透過率やフォグの影の式が発散する）。Playground の Sun で回せる。スライドは `sun: { azimuth, elevation }` で 1 枚だけ変えられる（光芒のスライドは逆光気味、方位 25 度・仰角 22 度）。太陽の向きはトゥイーンしない
 

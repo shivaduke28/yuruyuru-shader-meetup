@@ -372,7 +372,7 @@ vec3 noiseMean(vec3 c, vec3 rd, float d) {
   return sum / wsum;
 }
 
-// 太陽の円。視線と太陽の向きの角度で描き、縁は少しだけぼかす。フォグは空と同じく視線の透過率で薄まる
+// 太陽の円。視線と太陽の向きの角度で描き、縁は少しだけぼかす。円の大きさは見た目で決めた (実際の太陽は半径 0.27 度)
 const float SUN_RADIUS = radians(1.5);
 const float SUN_SOFT = radians(0.3);
 float sunDisc(vec3 rd) {
@@ -408,8 +408,7 @@ void main() {
     col = shade(p, calcNormal(p));
     d = hit;
   } else {
-    // 空 = 環境光 (どの方向から来る光も同じという前提) + 太陽の円。円の大きさは見た目で決めた (実際の太陽は半径 0.27 度)
-    col = u_ambient + u_lightColor * sunDisc(rd);
+    col = u_ambient; // 空 = 環境光 (どの方向から来る光も同じという前提)
     d = 1e5; // 無限遠扱い。rd.y <= 0 なら tau は発散して T -> 0
   }
 
@@ -423,6 +422,12 @@ void main() {
   vec3 inscatter = u_ambient * mixByScatter(u_albedo, u_uniformAlbedo, wa, wb) * (1.0 - T);
   if (u_sunScatter) inscatter += u_volumetricShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d, T);
   col = col * T + inscatter + mixByScatter(u_emission, u_uniformEmission, wa, wb) * (1.0 - T);
+  // 太陽の円は高さフォグだけで減衰させる (太陽の減衰と同じ割り切り。無限に広がる距離フォグは太陽を完全に遮ってしまう)。
+  // 空の地の色は距離フォグ込みの T で沈むので、空が白く沈んでも太陽の円は見える
+  if (hit < 0.0) {
+    vec3 Th = exp(-min(heightFogOpticalDepth(ro, rd, d, u_density, u_falloff, u_baseHeight), vec3(60.0)));
+    col += u_lightColor * sunDisc(rd) * Th;
+  }
 
   col = pow(col, vec3(1.0 / 2.2));
   fragColor = vec4(col, 1.0);
