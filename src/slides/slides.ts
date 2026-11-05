@@ -331,7 +331,6 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
         <li>ノイズを乗せる</li>
         <li>点光源の散乱</li>
         <li>位相関数</li>
-        <li>多重散乱（Playground に 2 ストリーム近似を入れてある）</li>
       </ul>`,
     params: rgb,
   },
