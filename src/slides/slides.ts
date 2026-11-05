@@ -17,13 +17,16 @@ export type Slide = {
   /** 下の本文 */
   body?: string
   params?: Partial<FogParams>
-  /** サーフェスの環境光にフォグを単散乱で適用する (renderer.ambientFog)。指定するとトグルも出る。省略時は false でトグルなし */
+  /** サーフェスの環境光 (空の光) にフォグを適用する: 空方向の透過率で減衰 + フォグで散乱して届く分を足す
+   *  (renderer.skyAttenuation + skyInscatterAmbient)。指定すると 2 つ別々のトグルが出る。省略時は false でトグルなし */
   fogAmbient?: boolean
-  /** 太陽光にフォグを適用する: 面に届く太陽光の減衰と太陽光の内散乱をまとめてオンにする
-   *  (renderer.lightAttenuation + renderer.sunScatter)。指定するとトグルも出る */
+  /** 太陽光にフォグを適用する: 面に届く太陽光の減衰、太陽光のカメラへの内散乱、サーフェスへの内散乱の 3 つをまとめてオンにする
+   *  (renderer.sunAttenuation + sunInscatter + sunInscatterAmbient)。指定すると 3 つ別々のトグルが出る */
   fogSun?: boolean
-  /** 太陽光の内散乱で柱の影を見る (renderer.volumetricShadow、光芒)。fogSun のときだけ効く。指定するとトグルも出る */
+  /** 太陽光の内散乱で柱の影を見る (renderer.sunInscatterShadow、光芒)。sunInscatter のときだけ効く。指定するとトグルも出る */
   sunShadow?: boolean
+  /** トグルを出すものを絞る。省略時は fogAmbient / fogSun / sunShadow のうち指定したもの全部 */
+  toggles?: ('fogAmbient' | 'fogSun' | 'sunShadow')[]
   /** 太陽の向き (度)。省略時は renderer の既定 (カメラの後ろ上からの順光) */
   sun?: { azimuth: number; elevation: number }
   /** スライダー。配列の配列にすると、内側の配列ごとに別のカード (Pane) になる */
@@ -41,9 +44,11 @@ export type Slide = {
 }
 
 // 環境光は暗めのグレー、太陽は暖色。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える。
-// 色は sRGB (params.ts 参照)。強さは sunIntensity (既定 1.6)
+// 色は sRGB (params.ts 参照)。強さは sunIntensity。
+// スライドの params は前のスライドの値に上書きされるだけなので、基準の plain / rgb は全部のキーを持つこと (抜けると前の値が残る)
 const ambient: [number, number, number] = [0.54, 0.54, 0.54]
 const lightColor: [number, number, number] = [1, 0.96, 0.88]
+const sunIntensity = 1.6
 
 const plain: Partial<FogParams> = {
   density: [0.8, 0.8, 0.8],
@@ -54,6 +59,7 @@ const plain: Partial<FogParams> = {
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
+  sunIntensity,
 }
 
 const rgb: Partial<FogParams> = {
@@ -65,6 +71,7 @@ const rgb: Partial<FogParams> = {
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
   lightColor,
+  sunIntensity,
 }
 
 const uniform: Partial<FogParams> = {
@@ -90,9 +97,10 @@ const heightControls = [
 ]
 
 // 距離フォグの色は環境光そのもの (無限に広がる一様フォグでは空の色 = フォグの色)
+// スライドのコードでは透過率を T と書き、高さフォグの透過率は heightFogTransmittance で呼ぶ (生の exp はここだけ)
 const distanceFogCode = code(`vec3 fogColor = ambient;
-float t = exp(-density * dist);
-color = mix(fogColor, color, t);`)
+float T = exp(-density * dist); // 透過率: 距離 dist で残る光の割合
+color = mix(fogColor, color, T);`)
 
 const uniformVariation = (
   id: string,
@@ -109,7 +117,7 @@ const uniformVariation = (
   body: `<p>${body}</p>`,
 })
 
-const heightFogCode = code('float fog = density * exp(-falloff * (pos.y - height));')
+const heightFogCode = code('float fogDensity = density * exp(-falloff * (pos.y - height)); // 高さ pos.y での濃さ')
 
 // 高さフォグの基準値 (plain) から 1 つだけパラメータを変えたスライド。変えたものと結果を本文で言う
 const heightVariation = (
@@ -203,8 +211,8 @@ export const slides: Slide[] = [
     },
     controls: [controlPresets.ambient, controlPresets.uniformRGB],
     side: code(`vec3 fogColor = ambient;
-vec3 t = exp(-density * dist); // density を vec3 にするだけ
-color = mix(fogColor, color, t);`),
+vec3 T = exp(-density * dist); // density を vec3 にするだけ
+color = mix(fogColor, color, T);`),
     body: '<p>density を RGB ごとに変えると、距離によって色が変わる。水の中のように赤から順に吸われる</p>',
   },
   assumptions('assumptions'),
@@ -236,15 +244,16 @@ color = mix(fogColor, color, t);`),
     title: 'シェーダーコード',
     params: plain,
     controls: heightControls,
-    side: code(`float heightFog(vec3 camPos, vec3 rayDir, float dist) {
+    side: code(`float heightFogTransmittance(vec3 camPos, vec3 rayDir, float dist) {
   float fv = falloff * rayDir.y;
   float i = fv == 0.0 ? dist : (1.0 - exp(-fv * dist)) / fv;
-  return density * exp(-falloff * (camPos.y - height)) * i;
+  float depth = density * exp(-falloff * (camPos.y - height)) * i; // 視線に沿って濃さを積分したもの
+  return exp(-depth);
 }
 
 vec3 fogColor = ambient * albedo;
-float fog = heightFog(camPos, rayDir, dist);
-color = mix(fogColor, color, exp(-fog));`),
+float T = heightFogTransmittance(camPos, rayDir, dist);
+color = mix(fogColor, color, T);`),
     body: '<p>この式はボリュームレンダリング方程式から出てくるが、導出はここでは説明しない</p>',
   },
   {
@@ -258,7 +267,7 @@ color = mix(fogColor, color, exp(-fog));`),
       [controlPresets.ambient, controlPresets.albedo, controlPresets.emission],
     ],
     side: code(`vec3 fogColor = ambient * albedo + emission;
-color = mix(fogColor, color, exp(-fog));`),
+color = mix(fogColor, color, T);`),
     body: '<p>散乱で入ってくる光とは別に、フォグ自体が発する光を足す</p>',
   },
   {
@@ -285,37 +294,41 @@ color = mix(fogColor, color, exp(-fog));`),
     id: 'fog-ambient',
     layout: 'demo',
     title: 'サーフェスの環境光にフォグを適用する',
+    // 太陽を消して環境光だけにし、環境光にフォグが効くところだけを見せる (太陽のスライドと対になる)。
     // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
-    params: { ...plain, albedo: [1, 0, 0] },
+    params: { ...plain, albedo: [1, 0, 0], sunIntensity: 0 },
     fogAmbient: true,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo],
     ],
     side: code(`vec3 skyDir = vec3(0.0, 2.0 / 3.0, sqrt(5.0) / 3.0); // 空へ向かう代表方向 (仰角の cos = 2/3)
-float T = exp(-heightFog(pos, skyDir, 1e5));
-vec3 ambientHere = ambient * (1.0 - (1.0 - albedo) * (1.0 - T));
+float T = heightFogTransmittance(pos, skyDir, 1e5);
+vec3 ambientHere = ambient * T;                // フォグを通り抜けて届く分
+ambientHere += ambient * albedo * (1.0 - T);   // フォグで散乱して届く分
 color = surfaceColor * (diffuse * sun + ambientHere);`),
     body: `
-      <p>サーフェスに届く環境光 = 透過する分 + フォグの内散乱 = ambient × (1 − (1 − albedo)(1 − T))。T は空へ向かう代表方向で計算</p>
-      <p>albedo が 1 ならフォグがあっても変わらない。吸収がある分だけ暗くなる</p>`,
+      <p>サーフェスに届く環境光 = 通り抜けて届く分 ambient × T + フォグで散乱して届く分 ambient × albedo × (1 − T)。T は空へ向かう代表方向で計算</p>
+      <p>albedo が 1 なら足すと ambient に戻る。フォグがあっても変わらず、吸収がある分だけ暗くなる</p>`,
   },
   {
     id: 'fog-sun',
     layout: 'demo',
     title: '太陽光にフォグを適用する',
-    // 太陽を黄色にして、散乱した太陽光がサーフェスとフォグに乗るのが色で分かるようにする
-    params: { ...plain, albedo: [0.74, 0.74, 0.74], lightColor: [1, 0.94, 0.47] },
-    fogAmbient: true,
-    fogSun: true,
+    // 環境光を消して太陽だけにし、フォグのアルベドを赤、太陽を黄色にする。太陽のトグルは発表者が 1 つずつ入れる:
+    // attenuation で日の当たる面が沈み、inscatter でフォグが黄 × 赤で光り、inscatter ambient でサーフェスにも乗る。
+    // 環境光が 0 なので空の 2 つは効かず、トグルも出さない
+    params: { ...plain, ambient: [0, 0, 0], albedo: [1, 0, 0], lightColor: [1, 0.92, 0.2] },
+    fogSun: false,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor, controlPresets.sunIntensity],
     ],
-    side: code(`float fog = heightFog(pos, lightDir, 1e5);
-vec3 sun = sunColor * exp(-fog);          // サーフェスに届く太陽光が減衰する
-ambientHere += sunInscatter(pos, skyDir); // 散乱した太陽光がサーフェスに届く
-color = surfaceColor * (diffuse * sun + ambientHere);`),
+    side: code(`vec3 sun = sunColor * heightFogTransmittance(pos, lightDir, 1e5); // サーフェスに届く太陽光が減衰する
+vec3 sunFog = sunInscatter(camPos, rayDir, dist);                 // 散乱した太陽光がカメラに届く
+ambientHere += sunInscatter(pos, skyDir, 1e5);                    // 散乱した太陽光がサーフェスに届く
+color = surfaceColor * (diffuse * sun + ambientHere);
+color = mix(fogColor, color, T) + sunFog;`),
     body: `
       <p>太陽光は 3 つの形で効くので、まとめて入れる</p>
       <ul>
@@ -343,6 +356,7 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
     fogAmbient: true,
     fogSun: true,
     sunShadow: true,
+    toggles: ['sunShadow'], // 空と太陽の 5 つは前のスライドで見せているので、ここでは影だけ
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor, controlPresets.sunIntensity],
@@ -351,7 +365,7 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
 for (int i = 0; i < 32; i++) {
   vec3 p = camPos + rayDir * t;
   float visible = shadow(p, lightDir);     // 柱に隠れていなければ 1
-  inscatter += transmittance(t) * density(p) * visible * dt;
+  inscatter += heightFogTransmittance(camPos, rayDir, t) * fogDensity(p) * visible * dt;
   t += dt;
 }`),
     body: `

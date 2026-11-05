@@ -49,11 +49,13 @@ const uniformNames = [
   'u_pillarHeight',
   'u_lightColor',
   'u_lightDir',
-  'u_lightAttenuation',
-  'u_sunScatter',
-  'u_ambientFog',
+  'u_sunAttenuation',
+  'u_sunInscatter',
+  'u_sunInscatterAmbient',
+  'u_skyAttenuation',
+  'u_skyInscatterAmbient',
   'u_emissionAmbient',
-  'u_volumetricShadow',
+  'u_sunInscatterShadow',
   'u_noise',
   'u_noiseScale',
   'u_noiseMin',
@@ -79,15 +81,19 @@ export type FogRenderer = {
   /** 太陽の仰角 (度、0..90)。0 だとフォグの透過率の式が発散するので下限を設ける */
   sunElevation: number
   /** 平行光源を高さフォグで減衰させる */
-  lightAttenuation: boolean
-  /** 太陽光の単散乱をフォグの内散乱に足す */
-  sunScatter: boolean
-  /** サーフェスの環境光にフォグを単散乱で適用する */
-  ambientFog: boolean
+  sunAttenuation: boolean
+  /** 太陽光の単散乱をフォグの内散乱に足す (カメラへ) */
+  sunInscatter: boolean
+  /** 太陽光の単散乱をサーフェスの環境光に足す (サーフェスへ) */
+  sunInscatterAmbient: boolean
+  /** サーフェスの環境光 (空の光) を空方向の透過率で減衰させる */
+  skyAttenuation: boolean
+  /** 空の光がフォグで散乱してサーフェスに届く分を環境光に足す */
+  skyInscatterAmbient: boolean
   /** サーフェスの環境光に高さフォグの発光を足す */
   emissionAmbient: boolean
-  /** 太陽光の内散乱で柱と床の影を見る (視線をレイマーチして数値積分。重い)。sunScatter のときだけ効く */
-  volumetricShadow: boolean
+  /** 太陽光の内散乱で柱と床の影を見る (視線をレイマーチして数値積分。重い)。sunInscatter のときだけ効く */
+  sunInscatterShadow: boolean
   /** 消散係数に 3D ノイズをかける (Pickles Note の Noise。視線の透過率にだけ効く) */
   noise: boolean
   /** ノイズの周波数 (1/長さ)。z 方向はワールドの周期で割り切れる値に丸める */
@@ -201,11 +207,13 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_lightDir, sunDirection(renderer.sunAzimuth, renderer.sunElevation))
     const sun = srgbToLinear(params.lightColor)
     gl.uniform3f(loc.u_lightColor, sun[0] * params.sunIntensity, sun[1] * params.sunIntensity, sun[2] * params.sunIntensity)
-    gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
-    gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
-    gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)
+    gl.uniform1i(loc.u_sunAttenuation, renderer.sunAttenuation ? 1 : 0)
+    gl.uniform1i(loc.u_sunInscatter, renderer.sunInscatter ? 1 : 0)
+    gl.uniform1i(loc.u_sunInscatterAmbient, renderer.sunInscatterAmbient ? 1 : 0)
+    gl.uniform1i(loc.u_skyAttenuation, renderer.skyAttenuation ? 1 : 0)
+    gl.uniform1i(loc.u_skyInscatterAmbient, renderer.skyInscatterAmbient ? 1 : 0)
     gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
-    gl.uniform1i(loc.u_volumetricShadow, renderer.volumetricShadow ? 1 : 0)
+    gl.uniform1i(loc.u_sunInscatterShadow, renderer.sunInscatterShadow ? 1 : 0)
     gl.uniform1i(loc.u_noise, renderer.noise ? 1 : 0)
     gl.uniform1f(loc.u_noiseScale, renderer.noiseScale)
     gl.uniform1f(loc.u_noiseMin, renderer.noiseMin)
@@ -257,11 +265,13 @@ export const createFogRenderer = (
     pillarHeight: 12,
     sunAzimuth: DEFAULT_SUN_AZIMUTH,
     sunElevation: DEFAULT_SUN_ELEVATION,
-    lightAttenuation: false,
-    sunScatter: false,
-    ambientFog: false,
+    sunAttenuation: false,
+    sunInscatter: false,
+    sunInscatterAmbient: false,
+    skyAttenuation: false,
+    skyInscatterAmbient: false,
     emissionAmbient: false,
-    volumetricShadow: false,
+    sunInscatterShadow: false,
     noise: false,
     noiseScale: 0.15,
     noiseMin: 0,

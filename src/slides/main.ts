@@ -86,10 +86,10 @@ const show = (i: number) => {
   footerEl.textContent = `${i + 1} / ${slides.length}`
 
   if (slide.params) assignParams(target, slide.params)
-  // トグルは現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
-  renderer.ambientFog = slide.fogAmbient ?? false
-  renderer.lightAttenuation = renderer.sunScatter = slide.fogSun ?? false
-  renderer.volumetricShadow = slide.sunShadow ?? false
+  // スライドの定義は現象ごと: fogAmbient = 空の光の 2 つ、fogSun = 太陽光の 3 つをまとめて入れる。トグルは renderer のフラグごとに出す
+  renderer.skyAttenuation = renderer.skyInscatterAmbient = slide.fogAmbient ?? false
+  renderer.sunAttenuation = renderer.sunInscatter = renderer.sunInscatterAmbient = slide.fogSun ?? false
+  renderer.sunInscatterShadow = slide.sunShadow ?? false
   renderer.sunAzimuth = slide.sun?.azimuth ?? DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = slide.sun?.elevation ?? DEFAULT_SUN_ELEVATION
 
@@ -105,22 +105,40 @@ const show = (i: number) => {
     panes = groups.map((specs) => createFogPane(paneEl, target, specs, undefined, live, () => assignParams(live, target)))
   }
   // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
-  if (slide.fogAmbient !== undefined || slide.fogSun !== undefined || slide.sunShadow !== undefined) {
+  const showToggle = (k: 'fogAmbient' | 'fogSun' | 'sunShadow') =>
+    slide[k] !== undefined && (slide.toggles === undefined || slide.toggles.includes(k))
+  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow')) {
     extraPane = new Pane({ container: paneEl })
-    const toggles = { fogAmbient: renderer.ambientFog, fogSun: renderer.sunScatter, sunShadow: renderer.volumetricShadow }
-    if (slide.fogAmbient !== undefined) {
-      extraPane.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', (ev) => {
-        renderer.ambientFog = ev.value
+    const toggles = {
+      skyAttenuation: renderer.skyAttenuation,
+      skyInscatterAmbient: renderer.skyInscatterAmbient,
+      sunAttenuation: renderer.sunAttenuation,
+      sunInscatter: renderer.sunInscatter,
+      sunInscatterAmbient: renderer.sunInscatterAmbient,
+      sunInscatterShadow: renderer.sunInscatterShadow,
+    }
+    if (showToggle('fogAmbient')) {
+      extraPane.addBinding(toggles, 'skyAttenuation', { label: 'sky attenuation' }).on('change', (ev) => {
+        renderer.skyAttenuation = ev.value
+      })
+      extraPane.addBinding(toggles, 'skyInscatterAmbient', { label: 'sky inscatter ambient' }).on('change', (ev) => {
+        renderer.skyInscatterAmbient = ev.value
       })
     }
-    if (slide.fogSun !== undefined) {
-      extraPane.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', (ev) => {
-        renderer.lightAttenuation = renderer.sunScatter = ev.value
+    if (showToggle('fogSun')) {
+      extraPane.addBinding(toggles, 'sunAttenuation', { label: 'sun attenuation' }).on('change', (ev) => {
+        renderer.sunAttenuation = ev.value
+      })
+      extraPane.addBinding(toggles, 'sunInscatter', { label: 'sun inscatter' }).on('change', (ev) => {
+        renderer.sunInscatter = ev.value
+      })
+      extraPane.addBinding(toggles, 'sunInscatterAmbient', { label: 'sun inscatter ambient' }).on('change', (ev) => {
+        renderer.sunInscatterAmbient = ev.value
       })
     }
-    if (slide.sunShadow !== undefined) {
-      extraPane.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }).on('change', (ev) => {
-        renderer.volumetricShadow = ev.value
+    if (showToggle('sunShadow')) {
+      extraPane.addBinding(toggles, 'sunInscatterShadow', { label: 'sun inscatter shadow' }).on('change', (ev) => {
+        renderer.sunInscatterShadow = ev.value
       })
     }
   }

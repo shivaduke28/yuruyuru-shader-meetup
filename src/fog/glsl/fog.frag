@@ -21,11 +21,13 @@ uniform float u_pillarHalfWidth; // 柱の半分の幅 (セル 8 の中に収ま
 uniform float u_pillarHeight;    // 柱の高さ
 uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
 uniform vec3 u_lightDir;       // 平行光源の向き (光源へ向かう単位ベクトル、y > 0)。既定はカメラの後ろ上からの順光
-uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
-uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す。u_lightAttenuation なら深さで減衰
-uniform bool u_ambientFog;     // サーフェスの環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))
+uniform bool u_sunAttenuation; // 平行光源を高さフォグで減衰させる
+uniform bool u_sunInscatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す (カメラへ)。u_sunAttenuation なら深さで減衰
+uniform bool u_sunInscatterAmbient; // 太陽光の単散乱をサーフェスの環境光に足す (サーフェスへ)
+uniform bool u_skyAttenuation;      // サーフェスの環境光 (空の光) を空方向の透過率で減衰させる: ambient * T
+uniform bool u_skyInscatterAmbient; // 空の光がフォグで散乱してサーフェスに届く分を環境光に足す: ambient * albedo * (1 - T)
 uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
-uniform bool u_volumetricShadow; // 太陽光の内散乱で、サンプル点から太陽への影 (柱・床) を見る。視線をレイマーチして数値積分する (光芒)
+uniform bool u_sunInscatterShadow; // 太陽光の内散乱で、サンプル点から太陽への影 (柱・床) を見る。視線をレイマーチして数値積分する (光芒)
 uniform bool u_noise;           // 消散係数に 3D ノイズをかける (視線の透過率にだけ効く)
 uniform float u_noiseScale;     // ノイズの周波数 (1/長さ)
 uniform float u_noiseMin;       // r = mix(noiseMin, noiseMax, fbm)
@@ -138,7 +140,7 @@ vec3 surfaceAlbedo(vec3 p) {
 // 点 p から太陽方向への高さフォグの透過率。太陽は無限遠なので d = ∞ の閉じた式になる
 // (u_lightDir.y > 0 なら光学的深さは有限)。一様フォグ成分は無限遠まで積もるので無視する
 vec3 sunTransmittance(vec3 p) {
-  if (!u_lightAttenuation) return vec3(1.0);
+  if (!u_sunAttenuation) return vec3(1.0);
   vec3 tau = heightFogOpticalDepth(p, u_lightDir, 1e5, u_density, u_falloff, u_baseHeight);
   return exp(-min(tau, vec3(60.0)));
 }
@@ -218,14 +220,14 @@ vec3 mixByScatter(vec3 h, vec3 u, vec3 a, vec3 b) {
 // 視線に沿って ∫ T_view(t) albedo_h kappa_h(t) T_sun(t) dt を積分する。高さフォグだけで、距離フォグは太陽光を散乱しない
 // (無限に広がる一様フォグの放射は ambient に含まれる。足すと密度がいくら小さくても lightColor / 4 に飽和して空やサーフェスが跳ぶ)。
 // T_sun = e^{-tau_h(t) / L.y} も高さフォグだけ (距離フォグは太陽を減衰させない)。
-// T_view には距離フォグも入る。積分は u_lightAttenuation なら s = -1 / L.y のモード積分、なければ 1 - T_h で、
+// T_view には距離フォグも入る。積分は u_sunAttenuation なら s = -1 / L.y のモード積分、なければ 1 - T_h で、
 // 距離フォグの分は fogMixFactors の heightFactor で積分の外に出す近似
 vec3 sunInscatter(vec3 c, vec3 rd, float d) {
   vec3 tauCam, tauEnd, tauView;
   rayTaus(c, rd, d, tauCam, tauEnd, tauView);
   vec3 hf, uf;
   fogMixFactors(c, rd, d, hf, uf);
-  vec3 scatter = u_lightAttenuation
+  vec3 scatter = u_sunAttenuation
     ? modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y)
     : 1.0 - exp(-tauView);
   return u_lightColor * 0.25 * u_albedo * scatter * hf;
@@ -276,8 +278,9 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
   return result;
 }
 
-// 面の環境光にフォグを単散乱で適用する。半球の各方向で「空の光が透過する分 T L_a」と「フォグの内散乱 w L_a (1 - T)」を足すと
-// L_a (1 - (1 - w)(1 - <T>)) になる (albedo = 1 なら変わらない。吸収がある分だけ暗くなる)。<T> は半球の cos 重み付き平均透過率。
+// 面の環境光にフォグを単散乱で適用する。半球の各方向で「空の光が透過する分 T L_a」(u_skyAttenuation) と
+// 「フォグの内散乱 w L_a (1 - T)」(u_skyInscatterAmbient) を足すと L_a (1 - (1 - w)(1 - <T>)) になる
+// (albedo = 1 なら変わらない。吸収がある分だけ暗くなる)。<T> は半球の cos 重み付き平均透過率。
 // <T> の積分は閉じないので、空へ向かう代表方向 1 本 (仰角 cos = 2/3) の透過率で代表する。
 // 上向きの面の <T> = 2 E3(tau) を exp(-1.5 tau) で近似する diffusivity factor で、数値積分でも上向きの面はよく合う。
 // 側面は本当は下半分が地面まで濃いフォグを通るので暗めになるはずだが、地面やシーンの仮定を持ち込まないために同じ T を使う
@@ -287,13 +290,9 @@ vec3 skyTransmittance(vec3 p) {
   return exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
 }
 
-vec3 singleScatterAmbient(vec3 T) {
-  return u_ambient * (1.0 - (1.0 - u_albedo) * (1.0 - T));
-}
-
 // 太陽光がフォグで 1 回散乱して面に届く分 (これも単散乱)。同じ代表方向で太陽の内散乱を積分する。
-// u_sunScatter に付随する (太陽→フォグ→サーフェスの経路なので、環境光にフォグをかけるかとは独立)
-vec3 sunScatterAmbient(vec3 p) {
+// u_sunInscatterAmbient で切り替える (太陽→フォグ→サーフェスの経路なので、空の光の扱いとは独立)
+vec3 sunInscatterAmbient(vec3 p) {
   return sunInscatter(p, SKY_DIR, 1e5);
 }
 
@@ -380,14 +379,15 @@ vec3 shade(vec3 p, vec3 n) {
   float sh = shadow(p + n * 0.02, u_lightDir);
   vec3 sun = u_lightColor * sunTransmittance(p);
   vec3 ambient = u_ambient;
-  if (u_ambientFog || u_emissionAmbient) {
+  if (u_skyAttenuation || u_skyInscatterAmbient || u_emissionAmbient) {
     vec3 T = skyTransmittance(p);
-    if (u_ambientFog) ambient = singleScatterAmbient(T);
+    if (u_skyAttenuation) ambient = u_ambient * T;
+    if (u_skyInscatterAmbient) ambient += u_ambient * u_albedo * (1.0 - T);
     // 発光するフォグに囲まれたサーフェスには全方向から発光が届く。視線の内散乱と同じ形で代表方向の (1 - T) を重みにする。
     // 距離フォグの発光は空まで無限に続いて T = 0 になるので含めない (albedo と同じ割り切り)
     if (u_emissionAmbient) ambient += u_emission * (1.0 - T);
   }
-  if (u_sunScatter) ambient += sunScatterAmbient(p);
+  if (u_sunInscatterAmbient) ambient += sunInscatterAmbient(p);
   return surfaceAlbedo(p) * (diff * sh * sun + ambient);
 }
 
@@ -421,7 +421,7 @@ void main() {
   vec3 wa, wb;
   fogScatterWeights(ro, rd, d, wa, wb);
   vec3 inscatter = u_ambient * mixByScatter(u_albedo, vec3(1.0), wa, wb) * (1.0 - T);
-  if (u_sunScatter) inscatter += u_volumetricShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d);
+  if (u_sunInscatter) inscatter += u_sunInscatterShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d);
   // 発光は高さフォグだけ (距離フォグの発光は ambient に含まれる) なので、散乱量の比で高さフォグの分だけ乗せる
   col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 - T);
   // 太陽の円は高さフォグだけで減衰させる。距離フォグの色は ambient そのもので空に合成しても空は変わらないので、

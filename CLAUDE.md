@@ -51,10 +51,13 @@ src/style.css     スライド・Playground・トップのスタイル
 - 上のカード（preset / resolution / Reset）は固定、下のカードは `max-height: calc(100vh - 32px)` の中でスクロールする。フォルダが増えても設計は変えない
 - resolution は物理ピクセルに対する倍率の選択式（x1 / x1/2 / x1/4）。4K のような絶対値にしないのは、ウィンドウの大きさと devicePixelRatio で同じラベルの意味が変わるから
 - フォルダの並びはスライドの流れ: Distance Fog → Height Fog → Lights → Noise → Scene → Camera
-- 光との相互作用のトグル 4 つ（fog on ambient / fog on sun / sun shadow in fog / emission on surface）は全部高さフォグのものなので Height Fog に置く。
+- 光との相互作用のトグル 7 つ（sky attenuation / sky inscatter ambient / sun attenuation / sun inscatter / sun inscatter ambient / sun inscatter shadow / emission ambient）は全部高さフォグのものなので Height Fog に置く。
+  名前は renderer のフラグと同じで、「光源 × 計算」をそのまま書く: attenuation = サーフェスに届くその光に透過率をかける、inscatter = その光の内散乱をカメラに足す、
+  「〜 ambient」= サーフェスの環境光の項に足す。環境光は光源としては sky と呼ぶ（空の色 = ambient で、T も空へ向かう方向で計算するため。足す先の項の ambient と区別する）。
+  以前の fog on ambient / fog on sun（何の計算か読めない）、ambient through fog / sunlit fog（現象の言い回しで中身が消える）はやめた
   Distance Fog は density だけ（光と相互作用しない）、Lights は光源の色と向きだけ。以前は Ambient Light / Sun Light のフォルダにトグルを分けて置いていたが、
   「fog on 〜」の fog がどちらのフォグか読めず、光源の設定とモデルの設定が混ざって見えたのでやめた
-- preset はフォグのパラメータと 4 つのトグルを決める（Scene / Noise / Camera は触らない）。Reset は Camera も含めて全部を既定に戻す（resolution は絵ではなく機械の都合なので触らない）
+- preset はフォグのパラメータとトグルを決める（Scene / Noise / Camera は触らない）。Reset は Camera も含めて全部を既定に戻す（resolution は絵ではなく機械の都合なので触らない）
 - 説明はツールチップ（title 属性、controls.ts の `withHelp` / `folderHelp`、スライダーは `controlPresets` の `help`）。Tweakpane にヘルプの仕組みがないのでブラウザ標準のもので代え、ペインを縦に伸ばす説明行は置かない。
   フォルダはタイトル行だけに付ける（フォルダ全体に付けると中のコントロールにも出る）
 
@@ -72,7 +75,7 @@ src/style.css     スライド・Playground・トップのスタイル
   両方あるときは視線に沿って散乱する量の比で混ぜる (fog.frag の `fogScatterWeights` + `mixByScatter`、`fogMixFactors` の近似を使う)。
   `emission` は高さフォグの発光で、距離フォグと混ざるときは albedo と同じ重みで高さフォグの分だけ乗せる。
   フォグの色 = `ambient * albedo + emission`。
-  発光は既定では面のアンビエントに足さない。renderer の `emissionAmbient`（Playground の emission on surface）を入れると、空へ向かう代表方向の `emission * (1 - T)` を足す（高さフォグのみ）
+  発光は既定では面のアンビエントに足さない。renderer の `emissionAmbient`（Playground の emission ambient）を入れると、空へ向かう代表方向の `emission * (1 - T)` を足す（高さフォグのみ）
 - 発光を散乱と同じ重みで足すのは、エミッションを密度に比例させたモデル（L_e = E·κ）として読めば厳密
 - 色空間は Unity のリニアワークフローと同じ。FogParams の色（ambient / albedo / emission / lightColor）と Tweakpane のカラーピッカーは sRGB で、
   renderer が `srgbToLinear` でリニアに変換してシェーダーに渡す。シェーダーはリニアで計算し、最後に `linearToSrgb` で sRGB にエンコードして出す（トーンマッピングなし、1 超はクリップ）。
@@ -80,15 +83,17 @@ src/style.css     スライド・Playground・トップのスタイル
   シェーダー内の定数（サーフェスの反射率 0.6、colorful の HSV）はリニアのまま
 - 配色は環境光が暗めのグレー (sRGB 0.54、リニア 0.25)、太陽が暖色で環境光より明るい (色 (1, 0.96, 0.88) × 強さ 1.6。リニアで (1.6, 1.45, 1.2))、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
 - 高さフォグのスライド 11〜14 は `plain` を基準に 1 枚 1 パラメータだけ変える（`heightVariation` に変えるものだけ渡す）
-- renderer のフラグは `lightAttenuation`（サーフェスに届く太陽光の減衰）、`sunScatter`（太陽光の内散乱）、`ambientFog`（サーフェスの環境光にフォグを単散乱で適用）、`emissionAmbient`（サーフェスの環境光にフォグの発光を足す。Playground のみ）、
-  `volumetricShadow`（太陽の内散乱で柱の影を見る光芒。`sunScatter` のときだけ効く。スライドでは `sunShadow`）の 5 つ。
-  スライドも Playground も現象ごとに `fogAmbient`（= ambientFog）と `fogSun`（= lightAttenuation + sunScatter をまとめて）で切り替える。
-  太陽の減衰・カメラへの内散乱・サーフェスへの内散乱（代表方向で `sunInscatter` を積分して環境光に足す。fog.frag の `sunScatterAmbient`。太陽→フォグ→サーフェスはフォグの散乱 1 回なので単散乱）は
-  エネルギーの帳尻が合うように必ずまとめてオンオフする。サーフェスへの内散乱は `sunScatter` だけで決まり、`ambientFog` とは独立
-  （以前は `ambientFog` のときだけ足していたが、fog on ambient が太陽の設定として振る舞って見えるので分けた）
-- 既定のモデルでは太陽はフォグの内散乱に入っていない（「全方向から同じ色で当たる」前提で ambient に丸め込んでいる）。`sunScatter` は等方散乱で lightColor / 4 を源にし、減衰ありなら s = −1 / L.y のモード積分（fog.frag の `modeIntegral`）で深さ減衰をつける
+- renderer のフラグは 7 つで、UI のトグルと 1 対 1:
+  `skyAttenuation`（サーフェスの環境光 × 空方向の透過率）、`skyInscatterAmbient`（空の光がフォグで散乱して届く分 ambient × albedo × (1 − T) を環境光に足す。両方で ambient × T + ambient × albedo × (1 − T)）、
+  `sunAttenuation`（サーフェスに届く太陽光 × 太陽方向の透過率）、`sunInscatter`（太陽光のカメラへの内散乱）、
+  `sunInscatterAmbient`（太陽光の内散乱を代表方向で積分して環境光に足す。fog.frag の `sunInscatterAmbient`。太陽→フォグ→サーフェスはフォグの散乱 1 回なので単散乱）、
+  `sunInscatterShadow`（太陽の内散乱で柱の影を見る光芒。`sunInscatter` のときだけ効く）、`emissionAmbient`（フォグの発光を環境光に足す。Playground のみ）。
+  エネルギーの帳尻を合わせるなら空の 2 つ、太陽の 3 つはそれぞれ揃えて入れる。
+  スライドの定義は現象ごとで、`fogAmbient` で空の 2 つ、`fogSun` で太陽の 3 つをまとめてオンにし、`sunShadow` が `sunInscatterShadow`。トグルはフラグごとに出る。
+  以前は環境光の 1 フラグ（ambientFog）のときだけ太陽の内散乱も環境光に足していたが、環境光のトグルが太陽の設定として振る舞って見えるので分けた
+- 既定のモデルでは太陽はフォグの内散乱に入っていない（「全方向から同じ色で当たる」前提で ambient に丸め込んでいる）。`sunInscatter` は等方散乱で lightColor / 4 を源にし、減衰ありなら s = −1 / L.y のモード積分（fog.frag の `modeIntegral`）で深さ減衰をつける
 - 距離フォグは太陽に一切関与しない。減衰させない（無限に広がる一様フォグは太陽を完全に遮るので割り切り）し、太陽光を散乱もしない（一様フォグの放射は ambient に含まれる）。
-  以前は距離フォグの散乱 (1 − e^{−κ_u d}) も足していたが、サーフェスへの内散乱（d = ∞）で密度に関わらず lightColor / 4 に飽和し、`fog on ambient` + `fog on sun` で距離フォグがあるとサーフェスが 2.5 倍明るく跳ね、空も ambient でなくなるので外した。
+  以前は距離フォグの散乱 (1 − e^{−κ_u d}) も足していたが、サーフェスへの内散乱（d = ∞）で密度に関わらず lightColor / 4 に飽和し、環境光と太陽のトグルを両方入れて距離フォグがあるとサーフェスが 2.5 倍明るく跳ね、空も ambient でなくなるので外した。
   太陽の内散乱は高さフォグの項だけだが、視線の透過率には距離フォグを入れる。e^{−κ_u t} が入ると閉じないので、距離フォグの透過率を代表距離で積分の外に出す近似にする（fog.frag の `fogMixFactors` の heightFactor。数値積分と比べて最大誤差 0.06）。
   スライドは距離フォグ 0 なので厳密。数値積分版（中点則 64 ステップ）も一度入れて見比べたが差が小さいので外した
 - ノイズ（renderer の `noise` / `noiseScale` / `noiseMin` / `noiseMax` / `noiseSpeed`、Playground の Noise）は Pickles Note の Noise の通り、消散係数に r = mix(min, max, fbm) をかけて τ̃ = R̄·τ とする。
@@ -97,18 +102,20 @@ src/style.css     スライド・Playground・トップのスタイル
   Gist の LV の求積を κ の測度に置き換えた案（光学的深さが等分になる位置に等重みで置く。位置は閉じた式 + ニュートン法で逆算、上限は定数 τ = 4.6）も一度入れて見比べたが、上の方式のほうが見た目が良かったので削除した。
   視線の透過率にだけかける（T̃ = T^R̄）。太陽の内散乱・サーフェスの環境光・光芒の march は閉じた式のまま。
   ノイズは 3 オクターブの 3D バリューノイズ（振幅 0.5 / 0.25 / 0.125）で、z の格子をワールドの周期 512 で巻いてカメラ座標の巻き戻しで絵が飛ばないようにする（周波数は 1/512 刻みに丸める）。流れは上向きだけ（z に付けると巻きが崩れる）
-- `volumetricShadow` は視線を 32 ステップ（48 単位まで、ピクセルごとのハッシュでずらす）レイマーチして、各点から太陽への影のレイを飛ばして `sunInscatter` と同じ被積分関数を数値積分する（fog.frag の `sunInscatterShadowed`）。
+- `sunInscatterShadow` は視線を 32 ステップ（48 単位まで、ピクセルごとのハッシュでずらす）レイマーチして、各点から太陽への影のレイを飛ばして `sunInscatter` と同じ被積分関数を数値積分する（fog.frag の `sunInscatterShadowed`）。
   影のレイは柱だけを見る専用の粗い march（`fogShadow`、24 歩、柱の上端まで。柱より上なら歩かない）。視線の透過率が 0.005 を切ったら打ち切る。
-  48 単位より先は影を無視して閉じた式に切り替える。サーフェスへの内散乱（`sunScatterAmbient`）は影を見ない
+  48 単位より先は影を無視して閉じた式に切り替える。サーフェスへの内散乱（`sunInscatterAmbient`）は影を見ない
 - 2 ストリーム近似（平行平板の多重散乱、太陽の特解込み、差分法で検算済み）は一度入れたが、使う場所がなくなったので削除した。必要ならコミット 12aac24 の fog.frag を参照
-- 面の環境光にフォグを単散乱で適用すると `ambient * (1 - (1 - albedo)(1 - <T>))`。<T> は空へ向かう代表方向 1 本（仰角 cos = 2/3、diffusivity factor）の透過率で代表し、面の向きは見ない。
+- 面の環境光にフォグを単散乱で適用すると `ambient * <T> + ambient * albedo * (1 - <T>)`（まとめると `ambient * (1 - (1 - albedo)(1 - <T>))` だが、スライドも UI も 2 項のまま書く。まとめた形は読みにくい）。<T> は空へ向かう代表方向 1 本（仰角 cos = 2/3、diffusivity factor）の透過率で代表し、面の向きは見ない。
   検討してボツにした案: 半球を上下に割って下半分に床までの透過率（床が y = 0 にあるこのデモでしか使えない）、
   下半分を T = 1（側面の沈みが消えて物足りない）、法線方向と空方向の T の平均（側面の法線サンプルが水平で T = 0 になり薄いフォグでも側面が暗い）、
   方向を平均してから T（exp の凸性で暗すぎ）。側面を正しくするには地面の高さが要るので、シンプルさを優先して 1 本にしたalbedo = 1 なら変わらない。
   深いところが暗くなる「床の吸収をフォグが映す」効果は多重散乱なので単散乱には出ない
 - `modeIntegral` は視線に沿った ∫ T κ e^{sτ} dt の閉じた形（(e^{sτcam} − T e^{sτend}) / (1 + s rd.y)、1 + s rd.y = 0 は極限に切替）。
   終点の高さは床で止める（FAR を超えて床に届かなかったレイを d = 1e5 のまま入れると inf − inf で NaN になる）
-- スライドのコードでは、距離フォグで `fogColor = ambient`、高さフォグの式のスライドで `fogColor = ambient * albedo` を書き、以降は `fogColor` で済ませる
+- スライドのコードでは、距離フォグで `fogColor = ambient`、高さフォグの式のスライドで `fogColor = ambient * albedo` を書き、以降は `fogColor` で済ませる。
+  透過率は `T` と書く。生の `exp(-density * dist)` は距離フォグの定義の 1 回だけで、高さフォグは `heightFogTransmittance(pos, dir, dist)` を定義して以降はそれを呼ぶ（`exp(-fog)` のような生の式を繰り返さない）。
+  高さ y での濃さは `fogDensity`。太陽の内散乱は `sunInscatter(pos, dir, dist)`
 
 ### シーン
 

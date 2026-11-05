@@ -14,10 +14,26 @@ const camera = defaultCamera()
 const renderer = createFogRenderer(canvas, params, camera)
 renderer.start()
 
-// トグルはスライドと同じ現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)、
-// サーフェスに発光、太陽の内散乱に柱の影
-type Toggles = { fogAmbient: boolean; fogSun: boolean; emissionAmbient: boolean; sunShadow: boolean }
-const defaultToggles = (): Toggles => ({ fogAmbient: false, fogSun: false, emissionAmbient: false, sunShadow: false })
+// トグルは renderer のフラグと 1 対 1。光源 (sky / sun) × {attenuation = サーフェスに届く光の減衰, inscatter = カメラへの内散乱,
+// inscatter ambient = サーフェスの環境光に足す内散乱} と、光芒、発光
+type Toggles = {
+  skyAttenuation: boolean
+  skyInscatterAmbient: boolean
+  sunAttenuation: boolean
+  sunInscatter: boolean
+  sunInscatterAmbient: boolean
+  sunInscatterShadow: boolean
+  emissionAmbient: boolean
+}
+const defaultToggles = (): Toggles => ({
+  skyAttenuation: false,
+  skyInscatterAmbient: false,
+  sunAttenuation: false,
+  sunInscatter: false,
+  sunInscatterAmbient: false,
+  sunInscatterShadow: false,
+  emissionAmbient: false,
+})
 
 // プリセット = フォグのパラメータとトグルの組み合わせ (再現できる見た目)。Scene / Noise / Camera は触らない
 type Preset = { params: Partial<FogParams>; toggles?: Partial<Toggles> }
@@ -53,16 +69,19 @@ const presets: Record<string, Preset> = {
       sunIntensity: 1,
       emission: [0, 0.22, 0],
     },
-    toggles: { fogSun: true },
+    toggles: { sunAttenuation: true, sunInscatter: true, sunInscatterAmbient: true },
   },
 }
 
 const toggles = defaultToggles()
 const applyToggles = () => {
-  renderer.ambientFog = toggles.fogAmbient
-  renderer.lightAttenuation = renderer.sunScatter = toggles.fogSun
+  renderer.skyAttenuation = toggles.skyAttenuation
+  renderer.skyInscatterAmbient = toggles.skyInscatterAmbient
+  renderer.sunAttenuation = toggles.sunAttenuation
+  renderer.sunInscatter = toggles.sunInscatter
+  renderer.sunInscatterAmbient = toggles.sunInscatterAmbient
+  renderer.sunInscatterShadow = toggles.sunInscatterShadow
   renderer.emissionAmbient = toggles.emissionAmbient
-  renderer.volumetricShadow = toggles.sunShadow
 }
 
 const applyPreset = (preset: Preset) => {
@@ -116,21 +135,35 @@ bound.addControls(heightFog, [
   controlPresets.albedo,
   controlPresets.emission,
 ])
+// 空の光 (= 環境光) にフォグを効かせる 2 つ。両方入れると ambient × T + ambient × albedo × (1 − T) で、albedo = 1 なら ambient に戻る
 withHelp(
-  heightFog.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }),
-  '高さフォグが環境光をサーフェスへ散乱する。サーフェスの環境光がフォグの色に近づく (albedo が 1 なら変わらない)',
+  heightFog.addBinding(toggles, 'skyAttenuation', { label: 'sky attenuation' }),
+  'サーフェスの環境光 (空の光) に空方向の透過率 T をかける: ambient × T',
 ).on('change', applyToggles)
 withHelp(
-  heightFog.addBinding(toggles, 'fogSun', { label: 'fog on sun' }),
-  '高さフォグが太陽光を減衰・散乱する。サーフェスに届く太陽光の減衰、視線への内散乱、サーフェスへの散乱光をまとめてオンオフ',
+  heightFog.addBinding(toggles, 'skyInscatterAmbient', { label: 'sky inscatter ambient' }),
+  '空の光が高さフォグで散乱してサーフェスに届く分を環境光に足す: ambient × albedo × (1 − T)',
+).on('change', applyToggles)
+// 太陽光にフォグを効かせる 3 つ。エネルギーの帳尻を合わせるなら 3 つとも入れる
+withHelp(
+  heightFog.addBinding(toggles, 'sunAttenuation', { label: 'sun attenuation' }),
+  'サーフェスに届く太陽光に太陽方向の透過率をかける',
 ).on('change', applyToggles)
 withHelp(
-  heightFog.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }),
-  '太陽光の内散乱で柱の影を見る (光芒)。fog on sun のときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い',
+  heightFog.addBinding(toggles, 'sunInscatter', { label: 'sun inscatter' }),
+  '太陽光の内散乱を視線 (カメラ) に足す。sun attenuation が入っていればフォグの中で深さに応じて減衰する',
 ).on('change', applyToggles)
 withHelp(
-  heightFog.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }),
-  '高さフォグの発光がサーフェスにも届く。空へ向かう代表方向の emission × (1 - T) をサーフェスの環境光に足す',
+  heightFog.addBinding(toggles, 'sunInscatterAmbient', { label: 'sun inscatter ambient' }),
+  '太陽光の内散乱をサーフェスの環境光に足す (空へ向かう代表方向で積分)',
+).on('change', applyToggles)
+withHelp(
+  heightFog.addBinding(toggles, 'sunInscatterShadow', { label: 'sun inscatter shadow' }),
+  'sun inscatter をレイマーチして柱の影を入れる (光芒)。sun inscatter のときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い',
+).on('change', applyToggles)
+withHelp(
+  heightFog.addBinding(toggles, 'emissionAmbient', { label: 'emission ambient' }),
+  '高さフォグの発光をサーフェスの環境光に足す: emission × (1 − T)',
 ).on('change', applyToggles)
 
 // 光源は色と向きだけ
