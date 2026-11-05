@@ -48,11 +48,11 @@ uniform float u_noiseSpeed;     // ノイズの流れる速さ (長さ/秒)
 vec3 heightFogOpticalDepth(vec3 c, vec3 rd, float d, vec3 a, vec3 f, vec3 h) {
   vec3 k0 = a * exp(-f * (c.y - h)); // カメラ位置での消散係数
   vec3 fv = f * rd.y;
-  bvec3 flat_ = lessThan(abs(fv), vec3(1e-4));
-  vec3 fvSafe = mix(fv, vec3(1.0), vec3(flat_));
+  bvec3 isFlat = lessThan(abs(fv), vec3(1e-4));
+  vec3 fvSafe = mix(fv, vec3(1.0), vec3(isFlat));
   vec3 slanted = k0 * (1.0 - exp(-fvSafe * d)) / fvSafe;
   vec3 horizontal = k0 * d;
-  return mix(slanted, horizontal, vec3(flat_));
+  return mix(slanted, horizontal, vec3(isFlat));
 }
 
 vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
@@ -147,12 +147,12 @@ vec3 sunTransmittance(vec3 p) {
   return exp(-min(tau, vec3(60.0)));
 }
 
-// 上端から測った高さフォグの光学的深さ tau(y) = kappa(y) / f (真上へ無限遠まで)
+// 真上に無限遠までの高さフォグの光学的深さ tau(y) = kappa(y) / f
 vec3 tauFromTop(float y) {
   return u_density * exp(-u_falloff * (y - u_baseHeight)) / u_falloff;
 }
 
-// 視線に沿った積分 ∫_0^d T(t) kappa(t) e^{s tau(t) + off} dt の閉じた形 (tau は上端からの光学的深さ)。
+// レイに沿った積分 ∫_0^d T(t) kappa(t) e^{s tau(t) + off} dt の閉じた形 (tau は真上に無限遠までの光学的深さ tauFromTop)。
 // 被積分関数の指数が e^{-fv t} の一次式なので、(e^{s tauCam + off} - T_d e^{s tauEnd + off}) / (1 + s rd.y) になる (s = 0 なら 1 - T_d)。
 // 1 + s rd.y = 0 の方向では被積分関数が一定で、極限は e^{s tauCam + off} tauView。off は指数のオーバーフロー回避用
 vec3 modeIntegral(vec3 s, vec3 off, vec3 tauCam, vec3 tauEnd, vec3 tauView, float rdy) {
@@ -175,7 +175,7 @@ void rayTaus(vec3 c, vec3 rd, float d, out vec3 tauCam, out vec3 tauEnd, out vec
 // 高さフォグと距離フォグが混ざるときの内散乱
 // 視線に沿った ∫ T_view(t) kappa(t) ... dt は、T_view = e^{-tau_h(t) - kappa_u t} に距離フォグが入ると
 // w = e^{-fv t} の冪乗になって閉じない (不完全ガンマ関数)。そこで平均値の定理で、もう一方のフォグの透過率を積分の外に出す:
-//   高さフォグの項 × heightFactor = 1 / (1 + kappa_u t*)。t* は高さフォグの光学的深さが 1 になる距離
+//   高さフォグの項 × heightFactor = 1 / (1 + kappa_u t_h)。t_h は高さフォグの光学的深さが 1 になる距離
 //     (届かなければ密度の e 倍距離 1 / fv に連続につなぐ、水平なら 1 / k0)。水平なレイで厳密 (kappa_h / (kappa_h + kappa_u))
 //   距離フォグの項 × uniformFactor = 1 / (1 + tau_h(t_u))。t_u は距離フォグの内散乱の重み kappa_u e^{-kappa_u t} の [0, d] での平均距離
 //   Python の数値積分と比べて最大誤差 0.06 (plain + 距離フォグ 0.005〜0.08、空から急な見下ろしまで)。水平線をまたいで連続
@@ -183,22 +183,22 @@ void rayTaus(vec3 c, vec3 rd, float d, out vec3 tauCam, out vec3 tauEnd, out vec
 void fogMixFactors(vec3 c, vec3 rd, float d, out vec3 heightFactor, out vec3 uniformFactor) {
   vec3 k0 = u_density * exp(-u_falloff * (c.y - u_baseHeight)); // カメラ位置の高さフォグの密度
   vec3 fv = u_falloff * rd.y;
-  bvec3 flat_ = lessThan(abs(fv), vec3(1e-4));
-  vec3 fvSafe = mix(fv, vec3(1.0), vec3(flat_));
+  bvec3 isFlat = lessThan(abs(fv), vec3(1e-4));
+  vec3 fvSafe = mix(fv, vec3(1.0), vec3(isFlat));
   // 高さフォグの光学的深さが 1 になる距離: (k0 / fv)(1 - e^{-fv t}) = 1 → t = -ln(1 - fv / k0) / fv。
   // 上向きで 1 に届かないレイは、無限遠の光学的深さの 63% (= 密度の e 倍距離 1 / fv) に達する距離へ連続につなぐ。
   // 届く・届かないで式を切り替えると、境目 (rd.y = k0 / f の等高線) が空に線として出る
   vec3 ratio = min(fv / max(k0, vec3(1e-6)), vec3(1.0 - exp(-1.0)));
-  vec3 tStar = -log(max(1.0 - ratio, vec3(1e-6))) / fvSafe;
-  tStar = min(mix(tStar, 1.0 / max(k0, vec3(1e-6)), vec3(flat_)), vec3(d));
-  heightFactor = 1.0 / (1.0 + u_uniformDensity * tStar);
+  vec3 tH = -log(max(1.0 - ratio, vec3(1e-6))) / fvSafe;
+  tH = min(mix(tH, 1.0 / max(k0, vec3(1e-6)), vec3(isFlat)), vec3(d));
+  heightFactor = 1.0 / (1.0 + u_uniformDensity * tH);
 
   // 距離フォグの内散乱の重みの平均距離 (切断指数分布の平均) での高さフォグの光学的深さ
   vec3 xd = u_uniformDensity * d;
   bvec3 thin = lessThan(xd, vec3(1e-4));
   vec3 xdSafe = mix(xd, vec3(1.0), vec3(thin));
   vec3 tU = mix(1.0 / max(u_uniformDensity, vec3(1e-6)) - d * exp(-xdSafe) / (1.0 - exp(-xdSafe)), vec3(0.5 * d), vec3(thin));
-  vec3 tauH = mix(k0 * (1.0 - exp(-fvSafe * tU)) / fvSafe, k0 * tU, vec3(flat_));
+  vec3 tauH = mix(k0 * (1.0 - exp(-fvSafe * tU)) / fvSafe, k0 * tU, vec3(isFlat));
   uniformFactor = 1.0 / (1.0 + min(tauH, vec3(1e4)));
 }
 
@@ -219,7 +219,7 @@ vec3 mixByScatter(vec3 h, vec3 u, vec3 a, vec3 b) {
 }
 
 // 太陽光の位相関数 × π。放射照度 π lightColor にかけると散乱の源 (視線方向へ散乱する放射輝度) になる。
-// Henyey-Greenstein で、g = 0 なら 1/(4π) × π = 1/4 (等方)。cosTheta = dot(視線, 太陽の向き) で、太陽を見る向きが 1。
+// Henyey-Greenstein で、g = 0 なら 1/(4π) × π = 1/4 (等方)。cosTheta = dot(レイの向き rd, 太陽の向き) で、太陽を見る向きが 1。
 // 平行光源は向きが一定なので視線上で定数になり、積分の外に出せる (閉じた式はそのまま)
 float sunPhase(float cosTheta) {
   float g = u_phaseG;

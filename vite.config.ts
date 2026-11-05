@@ -9,6 +9,7 @@ export default defineConfig({
         top: resolve(__dirname, 'index.html'),
         slides: resolve(__dirname, 'slides.html'),
         play: resolve(__dirname, 'play.html'),
+        note: resolve(__dirname, 'note.html'),
       },
     },
   },

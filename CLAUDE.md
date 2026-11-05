@@ -14,14 +14,15 @@ glslangValidator src/fog/glsl/fullscreen.vert src/fog/glsl/fog.frag   # シェ�
 - シェーダーを触ったら必ず glslangValidator を通す（ビルドでは検証されない）
 - `main` への push で GitHub Actions が GitHub Pages にデプロイする（.github/workflows/deploy.yml）
 - 公開 URL: https://shivaduke28.github.io/yuruyuru-shader-meetup/
-  （トップ / slides.html / play.html）
+  （トップ / slides.html / play.html / note.html）
 
 ## 構成
 
 ```
-index.html        トップ。スライドと Playground へのリンク
+index.html        トップ。スライド・Playground・解説へのリンク
 slides.html       スライド (src/slides/)
 play.html         Playground (src/play/)
+note.html         解説ページ (src/note/)。理論と実装、近似の一覧。数式は KaTeX の auto-render、コードは highlight.js
 src/fog/          スライドと Playground が共有する部分
   glsl/fog.frag   フルスクリーンレイマーチ + 指数関数高さフォグ。主役の関数は heightFogOpticalDepth
   glsl/fullscreen.vert
@@ -134,6 +135,15 @@ src/style.css     スライド・Playground・トップのスタイル
   太陽の円は高さフォグだけで減衰させる（太陽の減衰と同じ割り切り。空は d = 1e5 なので距離フォグを入れると密度がいくら小さくても消える）。空の地の色は距離フォグ込みで沈む
 - ライトは既定で順光（カメラの後ろ上、(0.3, 0.7, −0.6)）、ハードシャドウ。影のレイには最小歩幅を入れて表面すれすれでの stall を防ぐ。
   向きは renderer の `sunAzimuth` / `sunElevation`（度）で `u_lightDir` に渡す。仰角は 5 度を下限にする（0 だと太陽の透過率やフォグの影の式が発散する）。Playground の Sun で回せる。スライドは `sun: { azimuth, elevation }` で 1 枚だけ変えられる（光芒のスライドは逆光気味、方位 25 度・仰角 22 度）。太陽の向きはトゥイーンしない
+
+### 解説ページ (note.html)
+
+- 本文は HTML に直接書く。数式は `\( \)`（インライン）と `\[ \]`（別行立て）で、KaTeX の auto-render が描く。コードは `<pre><code class="language-glsl">` で、fog.frag から引く（変えたら揃える）
+- 構成: 記法とボリュームレンダリング方程式 → 距離フォグ（方程式をそのまま計算） → 高さフォグ → フォグの色（∫Tκ dt = 1 − T はここ） → 太陽光 (減衰 / カメラへ / サーフェスへ) → サーフェスの環境光 → 位相関数 → 光芒 → ノイズ → 近似の一覧 → 参考文献。
+  どの積分が厳密でどこで近似が入るかを必ず書く。近似を変えたら近似の一覧の表も更新する。opacity measure や split sum の一般論、色空間の節は入れない（読み手に要らないので外した）
+- 数式もコードと同じレイの向き `rd`（カメラから遠ざかる単位ベクトル、`x_t = c + t rd`）で書き、視線ベクトル `v` は使わない。
+  `v` は CG ではサーフェス → カメラの向きなので、−view の意味で `v` を使うのは禁止（レイの向きが欲しい変数に `v` と名付けない）
+- Pickles や Pickles Note には一切触れない（リンクも参考文献も置かない）。このページ単体で読めるように、必要な理論は本文で導く
 
 ### 文言
 
