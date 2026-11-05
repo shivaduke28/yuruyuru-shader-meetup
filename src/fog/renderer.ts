@@ -59,6 +59,7 @@ const uniformNames = [
   'u_emissionAmbient',
   'u_sunInscatterShadow',
   'u_phaseG',
+  'u_frame',
   'u_noise',
   'u_noiseScale',
   'u_noiseMin',
@@ -181,6 +182,7 @@ export const createFogRenderer = (
   let running = false
   let last = performance.now()
   const start = performance.now()
+  let frameIndex = 0
 
   const frame = (now: number) => {
     if (!running) return
@@ -196,6 +198,7 @@ export const createFogRenderer = (
     gl.bindVertexArray(vao)
     gl.uniform2f(loc.u_resolution, canvas.width, canvas.height)
     gl.uniform1f(loc.u_time, (now - start) / 1000)
+    gl.uniform1f(loc.u_frame, frameIndex++ % 4096)
     gl.uniform3fv(loc.u_cameraPosition, camPos)
     gl.uniformMatrix3fv(loc.u_cameraBasis, false, basis)
     gl.uniform3fv(loc.u_density, params.density)

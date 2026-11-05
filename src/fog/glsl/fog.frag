@@ -25,6 +25,7 @@ uniform bool u_sunAttenuation; // 平行光源を高さフォグで減衰させ�
 uniform bool u_sunInscatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す (カメラへ)。u_sunAttenuation なら深さで減衰
 uniform bool u_sunInscatterAmbient; // 太陽光の単散乱をサーフェスの環境光に足す (サーフェスへ)
 uniform float u_phaseG;        // 太陽光の散乱の Henyey-Greenstein の g (-1..1)。0 で等方、正で前方散乱
+uniform float u_frame;         // フレーム番号 (光芒の march の開始位置をフレームごとにずらす)
 uniform bool u_skyAttenuation;      // サーフェスの環境光 (空の光) を空方向の透過率で減衰させる: ambient * T
 uniform bool u_skyInscatterAmbient; // 空の光がフォグで散乱してサーフェスに届く分を環境光に足す: ambient * albedo * (1 - T)
 uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
@@ -260,7 +261,8 @@ float fogShadow(vec3 p) {
 
 // 太陽の内散乱を、サンプル点ごとに太陽方向の影 (柱) を見ながら数値積分する (光芒)。
 // 被積分関数は sunInscatter と同じ T_view [albedo_h kappa_h T_sun + albedo_u kappa_u] に影の可視性をかけたもの。
-// 等間隔の矩形則で、縞にならないようピクセルごとのハッシュで開始位置をずらす (時間では変えない)。
+// 等間隔の矩形則で、縞にならないようピクセルごとのハッシュで開始位置をずらし、さらにフレームごとに黄金比で回す
+// (同じピクセルの誤差が毎フレーム別方向にぶれて、目の中で平均されグレインになる。止めるとざらつきが固定されて目立つ)。
 // 視線の透過率がほぼ 0 になったら打ち切る。SHADOW_RANGE より先は影を無視して閉じた式 (sunInscatter) に切り替え、手前の透過率をかけて足す。
 // 1 ピクセルあたり最大 SHADOW_STEPS 本の影のレイを飛ばすので重い。Playground の resolution で調整する。
 // R はノイズの平均 (ノイズなしなら 1)。合成で視線の透過率を T^R にしているのと揃えて、march の中でも濃さに R をかけ、
@@ -271,7 +273,7 @@ const float SHADOW_RANGE = 48.0;
 vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix, vec3 R) {
   float tEnd = min(d, SHADOW_RANGE);
   float dt = tEnd / float(SHADOW_STEPS);
-  float jitter = hash21(pix);
+  float jitter = fract(hash21(pix) + 0.618034 * u_frame);
   vec3 sum = vec3(0.0);
   for (int i = 0; i < SHADOW_STEPS; i++) {
     float t = (float(i) + jitter) * dt;
