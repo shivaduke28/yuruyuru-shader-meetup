@@ -1,6 +1,6 @@
 import '../style.css'
 import { Pane } from 'tweakpane'
-import { createFogRenderer, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, MIN_SUN_ELEVATION } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, MIN_SUN_ELEVATION } from '../fog/renderer'
 import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
 import { controlPresets, createFogPane, folderHelp, withHelp } from '../fog/controls'
 
@@ -225,10 +225,10 @@ withHelp(topPane.addButton({ title: 'Reset' }), 'Camera も含めて全部を既
   renderer.sunAzimuth = DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = DEFAULT_SUN_ELEVATION
   renderer.noise = false
-  renderer.noiseScale = 0.15
-  renderer.noiseMin = 0
-  renderer.noiseMax = 1
-  renderer.noiseSpeed = 0.5
+  renderer.noiseScale = DEFAULT_NOISE.scale
+  renderer.noiseMin = DEFAULT_NOISE.min
+  renderer.noiseMax = DEFAULT_NOISE.max
+  renderer.noiseSpeed = DEFAULT_NOISE.speed
   const c = defaultCamera()
   camera.position[0] = c.position[0]
   camera.position[1] = c.position[1]

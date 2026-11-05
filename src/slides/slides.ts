@@ -1,6 +1,7 @@
 import hljs from 'highlight.js/lib/core'
 import glsl from 'highlight.js/lib/languages/glsl'
 import type { FogParams } from '../fog/params'
+import type { DEFAULT_NOISE } from '../fog/renderer'
 import { controlPresets, type ControlSpec } from '../fog/controls'
 
 hljs.registerLanguage('glsl', glsl)
@@ -25,8 +26,10 @@ export type Slide = {
   fogSun?: boolean
   /** 太陽光の内散乱で柱の影を見る (renderer.sunInscatterShadow、光芒)。sunInscatter のときだけ効く。指定するとトグルも出る */
   sunShadow?: boolean
-  /** トグルを出すものを絞る。省略時は fogAmbient / fogSun / sunShadow のうち指定したもの全部 */
-  toggles?: ('fogAmbient' | 'fogSun' | 'sunShadow')[]
+  /** 濃さに 3D ノイズをかける (renderer.noise)。指定するとトグルとノイズのスライダーも出る。省略したキーは renderer の既定 */
+  noise?: Partial<typeof DEFAULT_NOISE>
+  /** トグルを出すものを絞る。省略時は fogAmbient / fogSun / sunShadow / noise のうち指定したもの全部 */
+  toggles?: ('fogAmbient' | 'fogSun' | 'sunShadow' | 'noise')[]
   /** 太陽の向き (度)。省略時は renderer の既定 (カメラの後ろ上からの順光) */
   sun?: { azimuth: number; elevation: number }
   /** スライダー。配列の配列にすると、内側の配列ごとに別のカード (Pane) になる */
@@ -247,7 +250,7 @@ color = mix(fogColor, color, T);`),
     side: code(`float heightFogTransmittance(vec3 camPos, vec3 rayDir, float dist) {
   float fv = falloff * rayDir.y;
   float i = fv == 0.0 ? dist : (1.0 - exp(-fv * dist)) / fv;
-  float depth = density * exp(-falloff * (camPos.y - height)) * i; // 視線に沿って濃さを積分したもの
+  float depth = density * exp(-falloff * (camPos.y - height)) * i; // 視線上の濃さの合計
   return exp(-depth);
 }
 
@@ -377,12 +380,43 @@ for (int i = 0; i < 32; i++) {
       </ul>`,
   },
   {
+    id: 'noise',
+    layout: 'demo',
+    title: 'ノイズ',
+    // 高さフォグだけ、環境光で見る。カメラの高さまでフォグを残し (falloff 小)、ノイズの倍率を 0〜2 にしてムラをはっきり出す。
+    // 環境光を明るめにしてフォグを暖色にし、グレーのサーフェスと空に対して色でムラが見えるようにする
+    params: {
+      ...plain,
+      density: [0.5, 0.5, 0.5],
+      falloff: [0.3, 0.3, 0.3],
+      ambient: [0.7, 0.7, 0.7],
+      albedo: [1, 0.75, 0.45],
+    },
+    noise: { min: 0, max: 2 },
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo],
+    ],
+    side: code(`float R = 0.0, w = 0.0;
+for (int i = 0; i < 10; i++) {       // レイの上の数点で
+  vec3 p = camPos + rayDir * d[i];
+  R += fogDensity(p) * noise(p);     // ノイズを読んで、濃いところを重くして
+  w += fogDensity(p);
+}
+T = pow(T, R / w);                   // 平均で透過率を変える`),
+    body: `
+      <p>3D ノイズでフォグにムラをつける</p>
+      <ul>
+        <li>レイの上の数点で 3D ノイズを読んで平均する。フォグが濃いところを重くする</li>
+        <li>その平均 R で、透過率を T の R 乗にする</li>
+      </ul>`,
+  },
+  {
     id: 'extras',
     layout: 'text',
     title: 'その先',
     body: `
       <ul>
-        <li>ノイズを乗せる</li>
         <li>点光源の散乱</li>
         <li>位相関数</li>
       </ul>`,

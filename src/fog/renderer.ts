@@ -23,6 +23,8 @@ const RAD_TO_DEG = 180 / Math.PI
 export const DEFAULT_SUN_AZIMUTH = Math.atan2(0.3, -0.6) * RAD_TO_DEG
 export const DEFAULT_SUN_ELEVATION = Math.atan2(0.7, Math.hypot(0.3, -0.6)) * RAD_TO_DEG
 export const MIN_SUN_ELEVATION = 5
+/** ノイズの既定値 (Playground の Reset とスライドで共有) */
+export const DEFAULT_NOISE = { scale: 1, min: 0, max: 1, speed: 0.5 }
 
 /** 方位角・仰角 (度) から光源へ向かう単位ベクトル。方位角 0 が +z、90 が +x */
 const sunDirection = (azimuthDeg: number, elevationDeg: number): [number, number, number] => {
@@ -273,10 +275,10 @@ export const createFogRenderer = (
     emissionAmbient: false,
     sunInscatterShadow: false,
     noise: false,
-    noiseScale: 0.15,
-    noiseMin: 0,
-    noiseMax: 1,
-    noiseSpeed: 0.5,
+    noiseScale: DEFAULT_NOISE.scale,
+    noiseMin: DEFAULT_NOISE.min,
+    noiseMax: DEFAULT_NOISE.max,
+    noiseSpeed: DEFAULT_NOISE.speed,
     start() {
       if (running) return
       running = true

@@ -1,6 +1,6 @@
 import '../style.css'
 import 'highlight.js/styles/github-dark.css'
-import { createFogRenderer, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION } from '../fog/renderer'
 import {
   assignParams,
   cloneParams,
@@ -90,6 +90,13 @@ const show = (i: number) => {
   renderer.skyAttenuation = renderer.skyInscatterAmbient = slide.fogAmbient ?? false
   renderer.sunAttenuation = renderer.sunInscatter = renderer.sunInscatterAmbient = slide.fogSun ?? false
   renderer.sunInscatterShadow = slide.sunShadow ?? false
+  // ノイズはスライドごとに既定値に戻す (前のスライドでスライダーを動かしても持ち越さない)
+  const noise = { ...DEFAULT_NOISE, ...slide.noise }
+  renderer.noise = slide.noise !== undefined
+  renderer.noiseScale = noise.scale
+  renderer.noiseMin = noise.min
+  renderer.noiseMax = noise.max
+  renderer.noiseSpeed = noise.speed
   renderer.sunAzimuth = slide.sun?.azimuth ?? DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = slide.sun?.elevation ?? DEFAULT_SUN_ELEVATION
 
@@ -105,9 +112,9 @@ const show = (i: number) => {
     panes = groups.map((specs) => createFogPane(paneEl, target, specs, undefined, live, () => assignParams(live, target)))
   }
   // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
-  const showToggle = (k: 'fogAmbient' | 'fogSun' | 'sunShadow') =>
+  const showToggle = (k: 'fogAmbient' | 'fogSun' | 'sunShadow' | 'noise') =>
     slide[k] !== undefined && (slide.toggles === undefined || slide.toggles.includes(k))
-  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow')) {
+  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow') || showToggle('noise')) {
     extraPane = new Pane({ container: paneEl })
     const toggles = {
       skyAttenuation: renderer.skyAttenuation,
@@ -140,6 +147,13 @@ const show = (i: number) => {
       extraPane.addBinding(toggles, 'sunInscatterShadow', { label: 'sun inscatter shadow' }).on('change', (ev) => {
         renderer.sunInscatterShadow = ev.value
       })
+    }
+    if (showToggle('noise')) {
+      extraPane.addBinding(renderer, 'noise', { label: 'noise' })
+      extraPane.addBinding(renderer, 'noiseScale', { label: 'scale', min: 0.02, max: 3, step: 0.01 })
+      extraPane.addBinding(renderer, 'noiseMin', { label: 'min', min: 0, max: 2, step: 0.01 })
+      extraPane.addBinding(renderer, 'noiseMax', { label: 'max', min: 0, max: 2, step: 0.01 })
+      extraPane.addBinding(renderer, 'noiseSpeed', { label: 'speed', min: 0, max: 5, step: 0.1 })
     }
   }
 
