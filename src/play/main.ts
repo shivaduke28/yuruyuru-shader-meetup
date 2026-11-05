@@ -1,5 +1,5 @@
 import '../style.css'
-import { createFogRenderer } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, MIN_SUN_ELEVATION } from '../fog/renderer'
 import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
 import { controlPresets, createFogPane } from '../fog/controls'
 
@@ -50,11 +50,12 @@ const presets: Record<string, Preset> = {
 }
 
 // トグルはスライドと同じ現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
-const toggles = { fogAmbient: false, fogSun: false, emissionAmbient: false }
+const toggles = { fogAmbient: false, fogSun: false, emissionAmbient: false, sunShadow: false }
 const applyToggles = () => {
   renderer.ambientFog = toggles.fogAmbient
   renderer.lightAttenuation = renderer.sunScatter = toggles.fogSun
   renderer.emissionAmbient = toggles.emissionAmbient
+  renderer.volumetricShadow = toggles.sunShadow
 }
 
 const bound = createFogPane(paneEl, params, [])
@@ -94,14 +95,21 @@ bound.addControls(heightFog, [
 const distanceFog = pane.addFolder({ title: 'Distance Fog', expanded: true })
 bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo, controlPresets.uniformEmission])
 
-// 環境光と太陽はどちらのフォグにも共通なのでまとめる
-const light = pane.addFolder({ title: 'Light', expanded: true })
-bound.addControls(light, [controlPresets.ambient, controlPresets.lightColor])
-light.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
-light.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
-light.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }).on('change', applyToggles)
+// 環境光と太陽はどちらのフォグにも共通
+const ambientFolder = pane.addFolder({ title: 'Ambient', expanded: true })
+bound.addControls(ambientFolder, [controlPresets.ambient])
+ambientFolder.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', applyToggles)
+ambientFolder.addBinding(toggles, 'emissionAmbient', { label: 'emission on surface' }).on('change', applyToggles)
 
-const cam = pane.addFolder({ title: 'Camera', expanded: false })
+const sun = pane.addFolder({ title: 'Sun', expanded: true })
+bound.addControls(sun, [controlPresets.lightColor])
+sun.addBinding(renderer, 'sunAzimuth', { label: 'azimuth', min: -180, max: 180, step: 1 })
+sun.addBinding(renderer, 'sunElevation', { label: 'elevation', min: MIN_SUN_ELEVATION, max: 90, step: 1 })
+sun.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', applyToggles)
+// fog on sun がオンのときだけ効く。1 ピクセルあたり最大 32 本の影のレイを飛ばすので重い
+sun.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }).on('change', applyToggles)
+
+const cam = pane.addFolder({ title: 'Camera', expanded: true })
 // position は配列なので、編集用オブジェクトを挟んで書き戻す。z は進み続けるだけなので出さない
 const pos = { x: camera.position[0], y: camera.position[1] }
 const posBindings = [
@@ -127,11 +135,13 @@ cam.addBinding(renderer, 'resolutionScale', { min: 0.25, max: 1, step: 0.05, lab
 pane.addButton({ title: 'Reset' }).on('click', () => {
   assignParams(params, defaultFogParams())
   presetState.preset = 'plain'
-  toggles.fogAmbient = toggles.fogSun = toggles.emissionAmbient = false
+  toggles.fogAmbient = toggles.fogSun = toggles.emissionAmbient = toggles.sunShadow = false
   applyToggles()
   renderer.colorful = false
   renderer.pillarHalfWidth = 0.7
   renderer.pillarHeight = 12
+  renderer.sunAzimuth = DEFAULT_SUN_AZIMUTH
+  renderer.sunElevation = DEFAULT_SUN_ELEVATION
   pane.refresh()
   bound.refresh()
 })

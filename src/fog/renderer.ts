@@ -18,6 +18,20 @@ const compile = (gl: WebGL2RenderingContext, type: number, src: string) => {
 // 進み続ける z をこの範囲に巻き戻し、座標が大きくなって float の精度が落ちるのを防ぐ
 const WORLD_PERIOD = 8 * 64
 
+// 太陽の既定の向き (0.3, 0.7, -0.6): カメラは +z を向くので、後ろ上から当てて順光にする
+const RAD_TO_DEG = 180 / Math.PI
+export const DEFAULT_SUN_AZIMUTH = Math.atan2(0.3, -0.6) * RAD_TO_DEG
+export const DEFAULT_SUN_ELEVATION = Math.atan2(0.7, Math.hypot(0.3, -0.6)) * RAD_TO_DEG
+export const MIN_SUN_ELEVATION = 5
+
+/** 方位角・仰角 (度) から光源へ向かう単位ベクトル。方位角 0 が +z、90 が +x */
+const sunDirection = (azimuthDeg: number, elevationDeg: number): [number, number, number] => {
+  const az = azimuthDeg / RAD_TO_DEG
+  const el = Math.max(elevationDeg, MIN_SUN_ELEVATION) / RAD_TO_DEG
+  const c = Math.cos(el)
+  return [c * Math.sin(az), Math.sin(el), c * Math.cos(az)]
+}
+
 const uniformNames = [
   'u_resolution',
   'u_time',
@@ -36,10 +50,12 @@ const uniformNames = [
   'u_pillarHalfWidth',
   'u_pillarHeight',
   'u_lightColor',
+  'u_lightDir',
   'u_lightAttenuation',
   'u_sunScatter',
   'u_ambientFog',
   'u_emissionAmbient',
+  'u_volumetricShadow',
 ] as const
 type UniformName = (typeof uniformNames)[number]
 
@@ -55,6 +71,10 @@ export type FogRenderer = {
   pillarHalfWidth: number
   /** 柱の高さ */
   pillarHeight: number
+  /** 太陽の方位角 (度)。0 で +z (カメラの正面) から、180 で後ろから当たる */
+  sunAzimuth: number
+  /** 太陽の仰角 (度、0..90)。0 だとフォグの透過率の式が発散するので下限を設ける */
+  sunElevation: number
   /** 平行光源を高さフォグで減衰させる */
   lightAttenuation: boolean
   /** 太陽光の単散乱をフォグの内散乱に足す */
@@ -63,6 +83,8 @@ export type FogRenderer = {
   ambientFog: boolean
   /** サーフェスの環境光に高さフォグの発光を足す */
   emissionAmbient: boolean
+  /** 太陽光の内散乱で柱と床の影を見る (視線をレイマーチして数値積分。重い)。sunScatter のときだけ効く */
+  volumetricShadow: boolean
   start(): void
   stop(): void
   dispose(): void
@@ -165,11 +187,13 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_colorful, renderer.colorful ? 1 : 0)
     gl.uniform1f(loc.u_pillarHalfWidth, renderer.pillarHalfWidth)
     gl.uniform1f(loc.u_pillarHeight, renderer.pillarHeight)
+    gl.uniform3fv(loc.u_lightDir, sunDirection(renderer.sunAzimuth, renderer.sunElevation))
     gl.uniform3fv(loc.u_lightColor, params.lightColor)
     gl.uniform1i(loc.u_lightAttenuation, renderer.lightAttenuation ? 1 : 0)
     gl.uniform1i(loc.u_sunScatter, renderer.sunScatter ? 1 : 0)
     gl.uniform1i(loc.u_ambientFog, renderer.ambientFog ? 1 : 0)
     gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
+    gl.uniform1i(loc.u_volumetricShadow, renderer.volumetricShadow ? 1 : 0)
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     raf = requestAnimationFrame(frame)
   }
@@ -214,10 +238,13 @@ export const createFogRenderer = (
     colorful: false,
     pillarHalfWidth: 0.7,
     pillarHeight: 12,
+    sunAzimuth: DEFAULT_SUN_AZIMUTH,
+    sunElevation: DEFAULT_SUN_ELEVATION,
     lightAttenuation: false,
     sunScatter: false,
     ambientFog: false,
     emissionAmbient: false,
+    volumetricShadow: false,
     start() {
       if (running) return
       running = true

@@ -22,10 +22,12 @@ uniform bool u_colorful;       // 柱の色をセルごとにランダムな色�
 uniform float u_pillarHalfWidth; // 柱の半分の幅 (セル 8 の中に収まる範囲)
 uniform float u_pillarHeight;    // 柱の高さ
 uniform vec3 u_lightColor;     // 平行光源の色 × 強さ
+uniform vec3 u_lightDir;       // 平行光源の向き (光源へ向かう単位ベクトル、y > 0)。既定はカメラの後ろ上からの順光
 uniform bool u_lightAttenuation; // 平行光源を高さフォグで減衰させる
 uniform bool u_sunScatter;     // 太陽光の単散乱 (等方) をフォグの内散乱に足す。u_lightAttenuation なら深さで減衰
 uniform bool u_ambientFog;     // サーフェスの環境光にフォグを単散乱で適用する: ambient * (1 - (1 - albedo) (1 - T))
 uniform bool u_emissionAmbient; // サーフェスの環境光に高さフォグの発光を足す: emission * (1 - T)
+uniform bool u_volumetricShadow; // 太陽光の内散乱で、サンプル点から太陽への影 (柱・床) を見る。視線をレイマーチして数値積分する (光芒)
 
 // ---------------------------------------------------------------------------
 // 指数関数高さフォグ
@@ -112,8 +114,6 @@ float raymarch(vec3 ro, vec3 rd, float maxDist, float minStep) {
   return -1.0;
 }
 
-// ライトの向き（カメラは +z を向くので、後ろ上から当てて順光にする）
-const vec3 LIGHT_DIR = normalize(vec3(0.3, 0.7, -0.6));
 
 float shadow(vec3 ro, vec3 rd) {
   // 表面すれすれで歩幅が消えないように最小歩幅を入れる
@@ -133,10 +133,10 @@ vec3 surfaceAlbedo(vec3 p) {
 }
 
 // 点 p から太陽方向への高さフォグの透過率。太陽は無限遠なので d = ∞ の閉じた式になる
-// (LIGHT_DIR.y > 0 なら光学的深さは有限)。一様フォグ成分は無限遠まで積もるので無視する
+// (u_lightDir.y > 0 なら光学的深さは有限)。一様フォグ成分は無限遠まで積もるので無視する
 vec3 sunTransmittance(vec3 p) {
   if (!u_lightAttenuation) return vec3(1.0);
-  vec3 tau = heightFogOpticalDepth(p, LIGHT_DIR, 1e5, u_density, u_falloff, u_baseHeight);
+  vec3 tau = heightFogOpticalDepth(p, u_lightDir, 1e5, u_density, u_falloff, u_baseHeight);
   return exp(-min(tau, vec3(60.0)));
 }
 
@@ -228,9 +228,55 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d, vec3 T) {
   rayTaus(c, rd, d, tauCam, tauEnd, tauView);
   vec3 hf, uf;
   fogMixFactors(c, rd, d, hf, uf);
-  vec3 heightTerm = u_albedo * modeIntegral(vec3(-1.0 / LIGHT_DIR.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y) * hf;
+  vec3 heightTerm = u_albedo * modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y) * hf;
   vec3 uniformTerm = u_uniformAlbedo * (1.0 - exp(-min(u_uniformDensity * d, vec3(60.0)))) * uf;
   return source * (heightTerm + uniformTerm);
+}
+
+// フォグの中の点 p から太陽への影 (柱だけ。床は上向きのレイを遮らない)。
+// 柱の上端より上なら影はないので歩かない。歩くのも柱の上端までで、サーフェス上ではないので歩数と判定は粗くてよい
+float fogShadow(vec3 p) {
+  float maxDist = (u_pillarHeight - p.y) / u_lightDir.y;
+  if (maxDist <= 0.0) return 1.0;
+  float t = 0.0;
+  for (int i = 0; i < 24; i++) {
+    float h = pillarSdf(p + u_lightDir * t);
+    if (h < 0.02) return 0.0;
+    t += max(h, 0.1);
+    if (t > maxDist) break;
+  }
+  return 1.0;
+}
+
+// 太陽の内散乱を、サンプル点ごとに太陽方向の影 (柱) を見ながら数値積分する (光芒)。
+// 被積分関数は sunInscatter と同じ T_view [albedo_h kappa_h T_sun + albedo_u kappa_u] に影の可視性をかけたもの。
+// 等間隔の矩形則で、縞にならないようピクセルごとのハッシュで開始位置をずらす (時間では変えない)。
+// 視線の透過率がほぼ 0 になったら打ち切る。SHADOW_RANGE より先は影を無視して閉じた式 (sunInscatter) に切り替え、手前の透過率をかけて足す。
+// 1 ピクセルあたり最大 SHADOW_STEPS 本の影のレイを飛ばすので重い。Playground の resolution で調整する
+const int SHADOW_STEPS = 32;
+const float SHADOW_RANGE = 48.0;
+vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix) {
+  float tEnd = min(d, SHADOW_RANGE);
+  float dt = tEnd / float(SHADOW_STEPS);
+  float jitter = hash21(pix);
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < SHADOW_STEPS; i++) {
+    float t = (float(i) + jitter) * dt;
+    vec3 p = c + rd * t;
+    vec3 Tview = fogTransmittance(c, rd, t);
+    if (max(Tview.r, max(Tview.g, Tview.b)) < 0.005) break;
+    float vis = fogShadow(p);
+    if (vis <= 0.0) continue;
+    vec3 kappaH = u_density * exp(-u_falloff * (p.y - u_baseHeight));
+    sum += Tview * (u_albedo * kappaH * sunTransmittance(p) + u_uniformAlbedo * u_uniformDensity) * (vis * dt);
+  }
+  vec3 result = u_lightColor * 0.25 * sum;
+  if (d > tEnd) {
+    vec3 pEnd = c + rd * tEnd;
+    vec3 Trest = fogTransmittance(pEnd, rd, d - tEnd);
+    result += fogTransmittance(c, rd, tEnd) * sunInscatter(pEnd, rd, d - tEnd, Trest);
+  }
+  return result;
 }
 
 // 面の環境光にフォグを単散乱で適用する。半球の各方向で「空の光が透過する分 T L_a」と「フォグの内散乱 w L_a (1 - T)」を足すと
@@ -252,8 +298,8 @@ vec3 singleScatterAmbient(vec3 p, vec3 T) {
 }
 
 vec3 shade(vec3 p, vec3 n) {
-  float diff = max(dot(n, LIGHT_DIR), 0.0);
-  float sh = shadow(p + n * 0.02, LIGHT_DIR);
+  float diff = max(dot(n, u_lightDir), 0.0);
+  float sh = shadow(p + n * 0.02, u_lightDir);
   vec3 sun = u_lightColor * sunTransmittance(p);
   vec3 ambient = u_ambient;
   if (u_ambientFog || u_emissionAmbient) {
@@ -289,7 +335,7 @@ void main() {
   vec3 wa, wb;
   fogScatterWeights(ro, rd, d, wa, wb);
   vec3 inscatter = u_ambient * mixByScatter(u_albedo, u_uniformAlbedo, wa, wb) * (1.0 - T);
-  if (u_sunScatter) inscatter += sunInscatter(ro, rd, d, T);
+  if (u_sunScatter) inscatter += u_volumetricShadow ? sunInscatterShadowed(ro, rd, d, gl_FragCoord.xy) : sunInscatter(ro, rd, d, T);
   col = col * T + inscatter + mixByScatter(u_emission, u_uniformEmission, wa, wb) * (1.0 - T);
 
   col = pow(col, vec3(1.0 / 2.2));
