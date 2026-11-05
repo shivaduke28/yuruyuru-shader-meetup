@@ -297,6 +297,14 @@ vec3 singleScatterAmbient(vec3 p, vec3 T) {
   return ambient;
 }
 
+// 太陽の円。視線と太陽の向きの角度で描き、縁は少しだけぼかす。フォグは空と同じく視線の透過率で薄まる
+const float SUN_RADIUS = radians(1.5);
+const float SUN_SOFT = radians(0.3);
+float sunDisc(vec3 rd) {
+  float angle = acos(clamp(dot(rd, u_lightDir), -1.0, 1.0));
+  return 1.0 - smoothstep(SUN_RADIUS - SUN_SOFT, SUN_RADIUS, angle);
+}
+
 vec3 shade(vec3 p, vec3 n) {
   float diff = max(dot(n, u_lightDir), 0.0);
   float sh = shadow(p + n * 0.02, u_lightDir);
@@ -325,7 +333,8 @@ void main() {
     col = shade(p, calcNormal(p));
     d = hit;
   } else {
-    col = u_ambient; // 空 = 環境光 (どの方向から来る光も同じという前提)
+    // 空 = 環境光 (どの方向から来る光も同じという前提) + 太陽の円。円の大きさは見た目で決めた (実際の太陽は半径 0.27 度)
+    col = u_ambient + u_lightColor * sunDisc(rd);
     d = 1e5; // 無限遠扱い。rd.y <= 0 なら tau は発散して T -> 0
   }
 

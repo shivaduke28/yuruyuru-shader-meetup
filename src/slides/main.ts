@@ -1,6 +1,6 @@
 import '../style.css'
 import 'highlight.js/styles/github-dark.css'
-import { createFogRenderer } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION } from '../fog/renderer'
 import {
   assignParams,
   cloneParams,
@@ -89,6 +89,9 @@ const show = (i: number) => {
   // トグルは現象ごと: 環境光にフォグ (単散乱)、太陽光にフォグ (減衰 + 内散乱をまとめて)
   renderer.ambientFog = slide.fogAmbient ?? false
   renderer.lightAttenuation = renderer.sunScatter = slide.fogSun ?? false
+  renderer.volumetricShadow = slide.sunShadow ?? false
+  renderer.sunAzimuth = slide.sun?.azimuth ?? DEFAULT_SUN_AZIMUTH
+  renderer.sunElevation = slide.sun?.elevation ?? DEFAULT_SUN_ELEVATION
 
   panes.forEach((p) => p.pane.dispose())
   panes = []
@@ -102,9 +105,9 @@ const show = (i: number) => {
     panes = groups.map((specs) => createFogPane(paneEl, target, specs, undefined, live, () => assignParams(live, target)))
   }
   // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
-  if (slide.fogAmbient !== undefined || slide.fogSun !== undefined) {
+  if (slide.fogAmbient !== undefined || slide.fogSun !== undefined || slide.sunShadow !== undefined) {
     extraPane = new Pane({ container: paneEl })
-    const toggles = { fogAmbient: renderer.ambientFog, fogSun: renderer.sunScatter }
+    const toggles = { fogAmbient: renderer.ambientFog, fogSun: renderer.sunScatter, sunShadow: renderer.volumetricShadow }
     if (slide.fogAmbient !== undefined) {
       extraPane.addBinding(toggles, 'fogAmbient', { label: 'fog on ambient' }).on('change', (ev) => {
         renderer.ambientFog = ev.value
@@ -113,6 +116,11 @@ const show = (i: number) => {
     if (slide.fogSun !== undefined) {
       extraPane.addBinding(toggles, 'fogSun', { label: 'fog on sun' }).on('change', (ev) => {
         renderer.lightAttenuation = renderer.sunScatter = ev.value
+      })
+    }
+    if (slide.sunShadow !== undefined) {
+      extraPane.addBinding(toggles, 'sunShadow', { label: 'sun shadow in fog' }).on('change', (ev) => {
+        renderer.volumetricShadow = ev.value
       })
     }
   }

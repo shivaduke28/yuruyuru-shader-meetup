@@ -61,7 +61,7 @@ src/style.css     スライド・Playground・トップのスタイル
 - 配色は環境光が暗めのグレー (0.25)、太陽が暖色で環境光より明るい (1.6, 1.45, 1.2)、面の反射率 0.6。環境光が明るいと日の当たる面が白飛びし、フォグと影の差も消える
 - 高さフォグのスライド 11〜14 は `plain` を基準に 1 枚 1 パラメータだけ変える（`heightVariation` に変えるものだけ渡す）
 - renderer のフラグは `lightAttenuation`（サーフェスに届く太陽光の減衰）、`sunScatter`（太陽光の内散乱）、`ambientFog`（サーフェスの環境光にフォグを単散乱で適用）、`emissionAmbient`（サーフェスの環境光にフォグの発光を足す。Playground のみ）、
-  `volumetricShadow`（太陽の内散乱で柱と床の影を見る光芒。`sunScatter` のときだけ効く。Playground のみ）の 5 つ。
+  `volumetricShadow`（太陽の内散乱で柱の影を見る光芒。`sunScatter` のときだけ効く。スライドでは `sunShadow`）の 5 つ。
   スライドも Playground も現象ごとに `fogAmbient`（= ambientFog）と `fogSun`（= lightAttenuation + sunScatter をまとめて）で切り替える。
   太陽の減衰・カメラへの内散乱・サーフェスへの内散乱（`ambientFog` のとき、代表方向で `sunInscatter` を積分して環境光に足す。太陽→フォグ→サーフェスはフォグの散乱 1 回なので単散乱）は
   エネルギーの帳尻が合うように必ずまとめてオンオフする
@@ -86,8 +86,9 @@ src/style.css     スライド・Playground・トップのスタイル
 
 - y = 0 の床 + xz に 8 間隔で並ぶ高さ固定の柱（幅と高さは renderer の `pillarHalfWidth` / `pillarHeight`。既定 0.7 / 12。Playground の Scene で変えられる）。柱はセル中央で対称なので mod で繰り返しても SDF は正しい（高さをセルごとに変えるならグリッドトラバーサルが必要になる）
 - カメラは +z に進み続ける。柱の列は x = 4 + 8k なので、初期位置は x = 0（列の間）
+- 空は環境光 + 太陽の円（fog.frag の `sunDisc`、半径 1.5 度、色は lightColor）。既定の太陽はカメラの後ろなので、Playground で azimuth を 0 付近にすると見える
 - ライトは既定で順光（カメラの後ろ上、(0.3, 0.7, −0.6)）、ハードシャドウ。影のレイには最小歩幅を入れて表面すれすれでの stall を防ぐ。
-  向きは renderer の `sunAzimuth` / `sunElevation`（度）で `u_lightDir` に渡す。仰角は 5 度を下限にする（0 だと太陽の透過率やフォグの影の式が発散する）。Playground の Sun で回せる
+  向きは renderer の `sunAzimuth` / `sunElevation`（度）で `u_lightDir` に渡す。仰角は 5 度を下限にする（0 だと太陽の透過率やフォグの影の式が発散する）。Playground の Sun で回せる。スライドは `sun: { azimuth, elevation }` で 1 枚だけ変えられる（光芒のスライドは逆光気味、方位 25 度・仰角 22 度）。太陽の向きはトゥイーンしない
 
 ### 文言
 

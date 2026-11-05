@@ -22,6 +22,10 @@ export type Slide = {
   /** 太陽光にフォグを適用する: 面に届く太陽光の減衰と太陽光の内散乱をまとめてオンにする
    *  (renderer.lightAttenuation + renderer.sunScatter)。指定するとトグルも出る */
   fogSun?: boolean
+  /** 太陽光の内散乱で柱の影を見る (renderer.volumetricShadow、光芒)。fogSun のときだけ効く。指定するとトグルも出る */
+  sunShadow?: boolean
+  /** 太陽の向き (度)。省略時は renderer の既定 (カメラの後ろ上からの順光) */
+  sun?: { azimuth: number; elevation: number }
   /** スライダー。配列の配列にすると、内側の配列ごとに別のカード (Pane) になる */
   controls?: ControlSpec[] | ControlSpec[][]
   /** 指定すると intervalMs ごとに各チャンネルの値をランダムに選び直す */
@@ -320,6 +324,43 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
         <li>サーフェスに届く太陽光がフォグで減衰する</li>
         <li>太陽光がフォグで散乱してカメラに届く</li>
         <li>太陽光がフォグで散乱してサーフェスに届く（環境光に足す）</li>
+      </ul>`,
+  },
+  {
+    id: 'sun-shadow',
+    layout: 'demo',
+    title: '光芒',
+    // 光芒は逆光で太陽が低いときに見える。太陽を斜め前の低い位置に置き、影が手前へ伸びて視線を横切るようにする。
+    // 環境光を暗くして太陽を明るくし、散乱した太陽光と影の差を出す。falloff を小さくして柱の高さまでフォグを残す
+    params: {
+      ...plain,
+      density: [0.6, 0.6, 0.6],
+      falloff: [0.3, 0.3, 0.3],
+      albedo: [0.8, 0.8, 0.8],
+      ambient: [0.12, 0.12, 0.14],
+      lightColor: [2.4, 2.0, 0.6],
+    },
+    sun: { azimuth: 25, elevation: 22 },
+    fogAmbient: true,
+    fogSun: true,
+    sunShadow: true,
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor],
+    ],
+    side: code(`vec3 inscatter = vec3(0.0);
+for (int i = 0; i < 32; i++) {
+  vec3 p = camPos + rayDir * t;
+  float visible = shadow(p, lightDir);     // 柱に隠れていなければ 1
+  inscatter += transmittance(t) * density(p) * visible * dt;
+  t += dt;
+}`),
+    body: `
+      <p>太陽光の内散乱に柱の影を入れると、フォグの中に光の筋が見える</p>
+      <ul>
+        <li>閉じた式では書けないので、視線をレイマーチする</li>
+        <li>各点から太陽へ影のレイを飛ばして、隠れていれば散乱させない</li>
+        <li>1 ピクセルにつき数十本の影のレイを飛ばすので重い</li>
       </ul>`,
   },
   {
