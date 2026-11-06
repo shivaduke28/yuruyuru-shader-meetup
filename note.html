@@ -58,7 +58,10 @@
       </p>
       <p>カメラに届く放射輝度は、ボリュームレンダリング方程式で</p>
       \[
-        L(c) = T(c, x_d)\,L_o(x_d) + \int_0^d T(c, x_t)\,\bigl(\sigma(x_t)\,L_s(x_t) + L_e(x_t)\bigr)\,dt
+        \begin{aligned}
+        L(c) = {}& T(c, x_d)\,L_o(x_d) \\
+        &+ \int_0^d T(c, x_t)\,\bigl(\sigma(x_t)\,L_s(x_t) + L_e(x_t)\bigr)\,dt
+        \end{aligned}
       \]
       <p>
         と書ける。右辺の第 1 項はサーフェスの色 \(L_o\) が透過して届く分、第 2 項はレイ上の各点でフォグが散乱する光
@@ -80,8 +83,10 @@
         \(L_s = \int_{S^2} \frac{1}{4\pi} L_a\, d\omega = L_a\) で位置に依らず、透過率は \(T(c, x_t) = e^{-\kappa t}\) だから
       </p>
       \[
-        L(c) = e^{-\kappa d} L_o + \int_0^d e^{-\kappa t}\,\kappa\,L_a\,dt
-             = e^{-\kappa d} L_o + \bigl(1 - e^{-\kappa d}\bigr)\, L_a
+        \begin{aligned}
+        L(c) &= e^{-\kappa d} L_o + \int_0^d e^{-\kappa t}\,\kappa\,L_a\,dt \\
+             &= e^{-\kappa d} L_o + \bigl(1 - e^{-\kappa d}\bigr)\, L_a
+        \end{aligned}
       \]
       <p>となる。コードでは <code>mix(fogColor, color, exp(-density * dist))</code> である。</p>
       <pre><code class="language-glsl">vec3 fogColor = ambient;
@@ -110,9 +115,11 @@ color = mix(fogColor, color, T);</code></pre>
         レイ上の点 \(x_t = c + t\,\mathrm{rd}\) では \((x_t)_y = c_y + t\,\mathrm{rd}_y\) なので、光学的深さは初等的に積分できる。
       </p>
       \[
-        \tau(c, x_d) = \int_0^d a\, e^{-f(c_y + t\,\mathrm{rd}_y - h)}\,dt
-        = a\, e^{-f(c_y - h)} \int_0^d e^{-f\,\mathrm{rd}_y t}\,dt
-        = \frac{a\, e^{-f(c_y - h)}}{f\,\mathrm{rd}_y}\Bigl(1 - e^{-f\,\mathrm{rd}_y d}\Bigr)
+        \begin{aligned}
+        \tau(c, x_d) &= \int_0^d a\, e^{-f(c_y + t\,\mathrm{rd}_y - h)}\,dt \\
+        &= a\, e^{-f(c_y - h)} \int_0^d e^{-f\,\mathrm{rd}_y t}\,dt \\
+        &= \frac{a\, e^{-f(c_y - h)}}{f\,\mathrm{rd}_y}\Bigl(1 - e^{-f\,\mathrm{rd}_y d}\Bigr)
+        \end{aligned}
       \]
       <p>
         \(\mathrm{rd}_y \to 0\)（水平なレイ）では \(a e^{-f(c_y - h)} d\) が極限で、距離フォグと同じ形になる。
@@ -148,17 +155,22 @@ vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
         \(\frac{d}{dt}T(c, x_t) = -\kappa(x_t)\,T(c, x_t)\) なので、内散乱は
       </p>
       \[
+        \begin{aligned}
         \int_0^d T(c, x_t)\,\sigma(x_t)\,L_a\,dt
-        = \rho\,L_a \int_0^d T(c, x_t)\,\kappa(x_t)\,dt
-        = -\rho\,L_a \int_0^d \frac{d}{dt}T(c, x_t)\,dt
-        = \rho\,L_a\,\bigl(1 - T(c, x_d)\bigr)
+        &= \rho\,L_a \int_0^d T(c, x_t)\,\kappa(x_t)\,dt \\
+        &= -\rho\,L_a \int_0^d \frac{d}{dt}T(c, x_t)\,dt \\
+        &= \rho\,L_a\,\bigl(1 - T(c, x_d)\bigr)
+        \end{aligned}
       \]
       <p>
         になる。発光 \(L_e\) も \(\kappa\) に比例すると仮定して \(L_e(x) = E\,\kappa(x)\) と書く（\(E\) は定数。\(L_e\) を定数にすると
         \(\int_0^d T\,dt\) が指数積分になって初等関数で閉じない）。発光項は同じ変形で
       </p>
       \[
-        \int_0^d T(c, x_t)\,L_e(x_t)\,dt = E \int_0^d T(c, x_t)\,\kappa(x_t)\,dt = E\,\bigl(1 - T(c, x_d)\bigr)
+        \begin{aligned}
+        \int_0^d T(c, x_t)\,L_e(x_t)\,dt &= E \int_0^d T(c, x_t)\,\kappa(x_t)\,dt \\
+        &= E\,\bigl(1 - T(c, x_d)\bigr)
+        \end{aligned}
       \]
       <p>
         になり、散乱と足し合わせると
@@ -174,23 +186,27 @@ vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
         高さフォグだけの光学的深さを \(\tau_h(t) := \int_0^t \kappa_h(x_s)\,ds\) と書けば、透過率は \(T(c, x_t) = e^{-\tau_h(t) - \kappa_u t}\) と光学的深さを足すだけでよい。しかし色が違う。高さフォグの色は \(L_a\rho + E\)、距離フォグの色は \(L_a\) なので、内散乱は
       </p>
       \[
-        \int_0^d T(c, x_t)\,\bigl[(L_a\rho + E)\,\kappa_h(x_t) + L_a\,\kappa_u\bigr]\,dt
-        = (L_a\rho + E)\underbrace{\int_0^d T\,\kappa_h\,dt}_{I_h} + L_a\underbrace{\int_0^d T\,\kappa_u\,dt}_{I_u}
+        \begin{aligned}
+        &\int_0^d T(c, x_t)\,\bigl[(L_a\rho + E)\,\kappa_h(x_t) + L_a\,\kappa_u\bigr]\,dt \\
+        &= (L_a\rho + E)\underbrace{\int_0^d T\,\kappa_h\,dt}_{I_h} + L_a\underbrace{\int_0^d T\,\kappa_u\,dt}_{I_u}
+        \end{aligned}
       \]
       <p>
         になる。\(I_h = \int_0^d e^{-\tau_h(t) - \kappa_u t}\,\kappa_h(t)\,dt\) は初等的に解けないので、次の近似値を使う。
       </p>
       \[
-        I_h \approx A := \frac{1 - e^{-\tau_h(d)}}{1 + \kappa_u\,t_h}, \qquad
+        I_h \approx A := \frac{1 - e^{-\tau_h(d)}}{1 + \kappa_u\,t_h}, \quad
         I_u \approx B := \frac{1 - e^{-\kappa_u d}}{1 + \tau_h(t_u)}
       \]
       <p>
         \(t_h\) と \(t_u\) は、それぞれのフォグが散乱する距離の代表値で
       </p>
       \[
-        \tau_h(t_h) = 1, \qquad
-        t_u := \frac{\int_0^d t\,\kappa_u e^{-\kappa_u t}\,dt}{\int_0^d \kappa_u e^{-\kappa_u t}\,dt}
+        \begin{aligned}
+        \tau_h(t_h) &= 1 \\
+        t_u &:= \frac{\int_0^d t\,\kappa_u e^{-\kappa_u t}\,dt}{\int_0^d \kappa_u e^{-\kappa_u t}\,dt}
         = \frac{1}{\kappa_u} - \frac{d\,e^{-\kappa_u d}}{1 - e^{-\kappa_u d}}
+        \end{aligned}
       \]
       <p>
         とする（\(\tau_h(d) \lt 1\) で \(t_h\) がないレイでは \(1/(f\,\mathrm{rd}_y)\) に連続につなぐ）。
@@ -235,8 +251,11 @@ col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 -
         3 節の式で \(c = p\)、\(\mathrm{rd} = l\)、\(d = \infty\) とすれば
       </p>
       \[
-        \tau_l(p) = \frac{a\, e^{-f(p_y - h)}}{f\, l_y} = \frac{\tau_\uparrow(p)}{l_y}, \qquad
-        \tau_\uparrow(p) := \frac{\kappa(p)}{f}, \qquad T_l(p) = e^{-\tau_l(p)}
+        \begin{aligned}
+        \tau_l(p) &= \frac{a\, e^{-f(p_y - h)}}{f\, l_y} = \frac{\tau_\uparrow(p)}{l_y} \\
+        \tau_\uparrow(p) &:= \frac{\kappa(p)}{f} \\
+        T_l(p) &= e^{-\tau_l(p)}
+        \end{aligned}
       \]
       <p>
         である。\(\tau_\uparrow(p)\) は高さ \(p_y\) から真上に無限遠までの光学的深さで、コードの <code>tauFromTop</code> である。
@@ -265,8 +284,10 @@ vec3 sunTransmittance(vec3 p) {
         \(\tau(c, x_t) = (u(0) - u(t)) / \mathrm{rd}_y\) で、\(T_l = e^{s u}\)（\(s = -1/l_y\)）だから
       </p>
       \[
-        \int_0^d T(c, x_t)\,\kappa(x_t)\,e^{s\,u(t)}\,dt
-        = \frac{e^{s\,u(0)} - T(c, x_d)\,e^{s\,u(d)}}{1 + s\,\mathrm{rd}_y}
+        \begin{aligned}
+        &\int_0^d T(c, x_t)\,\kappa(x_t)\,e^{s\,u(t)}\,dt \\
+        &= \frac{e^{s\,u(0)} - T(c, x_d)\,e^{s\,u(d)}}{1 + s\,\mathrm{rd}_y}
+        \end{aligned}
       \]
       <p>
         となる。\(1 + s\,\mathrm{rd}_y = 0\)、つまり \(\mathrm{rd}_y = l_y\)（レイが太陽と同じ仰角で上がる方向）では被積分関数が \(\kappa\) の定数倍になり、極限は \(e^{s u(0)}\,\tau(c, x_d)\)。
@@ -318,8 +339,11 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d) {
         これを余弦重みで半球平均すると
       </p>
       \[
-        L_a\,\langle T \rangle + \rho\,L_a\,\bigl(1 - \langle T \rangle\bigr) = L_a\Bigl(1 - (1 - \rho)\bigl(1 - \langle T\rangle\bigr)\Bigr),
-        \qquad \langle T \rangle := \frac{1}{\pi}\int_{H^2} T(\omega)\,(n \cdot \omega)\,d\omega
+        \begin{aligned}
+        &L_a\,\langle T \rangle + \rho\,L_a\,\bigl(1 - \langle T \rangle\bigr) \\
+        &= L_a\Bigl(1 - (1 - \rho)\bigl(1 - \langle T\rangle\bigr)\Bigr) \\
+        \langle T \rangle &:= \frac{1}{\pi}\int_{H^2} T(\omega)\,(n \cdot \omega)\,d\omega
+        \end{aligned}
       \]
       <p>
         で、\(H^2\) は法線 \(n\) の側の半球である。\(\rho = 1\) なら \(L_a\) に戻る（吸収がなければフォグがあっても環境光は変わらない）。スライドと Playground ではこの 2 項を
@@ -362,7 +386,7 @@ vec3 shade(vec3 p, vec3 n) {
       <p>散乱する向きの偏りは Henyey–Greenstein の位相関数で表す。</p>
       \[
         \beta_{HG}(\cos\theta) = \frac{1}{4\pi}\,\frac{1 - g^2}{\bigl(1 + g^2 - 2g\cos\theta\bigr)^{3/2}},
-        \qquad \cos\theta = \mathrm{rd} \cdot l
+        \quad \cos\theta = \mathrm{rd} \cdot l
       \]
       <p>
         \(g = 0\) で等方、\(g &gt; 0\) で前方散乱（光の進む向きに散乱しやすい）、\(g &lt; 0\) で後方散乱。
@@ -430,8 +454,10 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix, vec3 R) {
         光学的深さは
       </p>
       \[
-        \tilde\tau(c, x_d) = \int_0^d r(x_t)\,\kappa(x_t)\,dt = \bar R\;\tau(c, x_d),
-        \qquad \bar R := \frac{\int_0^d r(x_t)\,\kappa(x_t)\,dt}{\int_0^d \kappa(x_t)\,dt}
+        \begin{aligned}
+        \tilde\tau(c, x_d) &= \int_0^d r(x_t)\,\kappa(x_t)\,dt = \bar R\;\tau(c, x_d) \\
+        \bar R &:= \frac{\int_0^d r(x_t)\,\kappa(x_t)\,dt}{\int_0^d \kappa(x_t)\,dt}
+        \end{aligned}
       \]
       <p>
         と書ける。これは \(\bar R\)（レイ上の \(r\) の \(\kappa\) 重み付き平均）の定義そのもので、<strong>厳密に</strong>成り立つ。
@@ -488,6 +514,7 @@ T = pow(T, R);</code></pre>
       <!-- ------------------------------------------------------------ -->
       <h2 id="approximations">10. 近似の一覧</h2>
       <p>どこが厳密でどこが近似かをまとめる。「モデルの下で厳密」とは、単散乱・平行光源・一様な環境光というモデルを認めた上で積分に近似がないことを指す。</p>
+      <div class="note-table-wrap">
       <table class="note-table">
         <thead>
           <tr><th>項目</th><th>評価</th><th>内容</th></tr>
@@ -507,6 +534,7 @@ T = pow(T, R);</code></pre>
           <tr><td>多重散乱</td><td>なし</td><td>単散乱のみ。多重散乱で生じる成分は環境光 \(L_a\) で代用している</td></tr>
         </tbody>
       </table>
+      </div>
 
       <!-- ------------------------------------------------------------ -->
       <h2 id="references">11. 参考文献</h2>

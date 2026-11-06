@@ -377,16 +377,49 @@ body.note {
   font-size: 0.92em;
 }
 
-/* 別行立ての数式は横にはみ出したらスクロール */
+/* 別行立ての数式は横にはみ出したらスクロール。長い式は aligned で折っておき、スクロールは保険 */
 .note-main .katex-display {
   margin: 1.2rem 0;
-  padding: 0.2rem 0;
+  padding: 0.3rem 0;
   overflow-x: auto;
   overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.note-main .katex-display > .katex {
+  /* 中身が幅を超えたときに左端から見えるようにする (中央寄せだと左が切れる) */
+  text-align: left;
+  width: max-content;
+  min-width: 100%;
 }
 
 .note-main .katex {
   font-size: 1.08em;
+}
+
+/* 表も狭い画面では横スクロール */
+.note-main .note-table-wrap {
+  overflow-x: auto;
+}
+
+@media (max-width: 600px) {
+  .note-main {
+    padding: 20px 14px 64px;
+    font-size: 0.98rem;
+  }
+
+  .note-main .katex {
+    font-size: 1em;
+  }
+
+  .note-toc ol {
+    columns: 1;
+  }
+
+  .note-main pre {
+    font-size: 0.78rem;
+    padding: 12px 14px;
+  }
 }
 
 .note-table {
