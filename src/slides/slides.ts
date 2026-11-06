@@ -11,7 +11,8 @@ export type RandomRange = { min: number; max: number }
 export type Slide = {
   id: string
   /** demo: 左にデモ、右にコードとスライダー。text: 見出しと本文だけ */
-  layout: 'demo' | 'text'
+  /** demo: 見出し + デモ + 右カラム + 本文、text: 見出し + 本文、cover: デモをステージ全体の背景にして見出しと本文を重ねる (表紙) */
+  layout: 'demo' | 'text' | 'cover'
   title: string
   /** 右カラム（コードなど） */
   side?: string
@@ -172,10 +173,29 @@ const assumptions = (id: string, highlight?: number): Slide => ({
 export const slides: Slide[] = [
   {
     id: 'title',
-    layout: 'text',
+    layout: 'cover',
     title: '指数関数高さフォグ',
     body: '<p>shivaduke / ゆるゆるシェーダー交流会 #2</p>',
-    params: rgb,
+    // 表紙: 光芒のスライドと同じ逆光の構図に、位相関数とノイズも入れて全部盛りにする。トグルは出さない。
+    // density / falloff / height を RGB で少しずつ変えて、高さによって色が変わるようにする
+    // (赤は薄くて高くまで、青は濃くて低く、緑はその間。height もずらして境目が同じ高さに揃わないようにする)
+    params: {
+      ...plain,
+      density: [0.45, 0.6, 0.8],
+      falloff: [0.25, 0.35, 0.5],
+      baseHeight: [1.5, 1, 0.5],
+      albedo: [0.91, 0.91, 0.91],
+      ambient: [0.38, 0.38, 0.41],
+      lightColor: [1, 0.92, 0.54],
+      sunIntensity: 2.4,
+    },
+    sun: { azimuth: 25, elevation: 22 },
+    fogAmbient: true,
+    fogSun: true,
+    sunShadow: true,
+    phaseG: 0.5,
+    noise: { min: 0.3, max: 1.7 },
+    toggles: [],
   },
   {
     id: 'no-fog',
@@ -328,7 +348,7 @@ color = mix(fogColor, color, T);`),
     layout: 'text',
     title: '',
     // 区切りのページ。見出しなしで中央に 1 文だけ
-    body: '<p class="banner">以下、マニアックな内容。</p>',
+    body: '<p class="banner">以下、発展的な内容。</p>',
     params: plain,
   },
   {
@@ -338,7 +358,7 @@ color = mix(fogColor, color, T);`),
     // 太陽を消して環境光だけにし、環境光にフォグが効くところだけを見せる (太陽のスライドと対になる)。
     // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
     params: { ...plain, albedo: [1, 0, 0], sunIntensity: 0 },
-    fogAmbient: true,
+    fogAmbient: false,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo],
@@ -349,8 +369,10 @@ vec3 ambientHere = ambient * T;                // フォグを通り抜けて届
 ambientHere += ambient * albedo * (1.0 - T);   // フォグで散乱して届く分
 color = surfaceColor * (diffuse * sun + ambientHere);`),
     body: `
-      <p>サーフェスに届く環境光 = 通り抜けて届く分 ambient × T + フォグで散乱して届く分 ambient × albedo × (1 − T)。T は空へ向かう代表方向で計算</p>
-      <p>albedo が 1 なら足すと ambient に戻る。フォグがあっても変わらず、吸収がある分だけ暗くなる</p>`,
+      <ul>
+        <li>環境光を高さフォグで減衰させる</li>
+        <li>フォグで散乱した分を環境光に足す</li>
+      </ul>`,
   },
   {
     id: 'fog-sun',
@@ -446,10 +468,9 @@ float phase(float cosTheta, float g) {
 // 太陽の向きは一定なので、視線上で定数。内散乱に係数としてかけるだけ
 sunFog *= phase(dot(rayDir, lightDir), g) * 4.0 * PI;`),
     body: `
-      <p>散乱する向きに偏りをつける</p>
       <ul>
-        <li>g &gt; 0 で光の進む向きに散乱しやすい（前方散乱）。太陽の周りのフォグが明るく、反対側が暗くなる</li>
-        <li>太陽光は向きが一定なので、位相関数は視線上で定数。閉じた式に係数をかけるだけ</li>
+        <li>空気より重いガスなどは、前方に散乱しやすい（ミー散乱）</li>
+        <li>平行光源は向きが一定なので計算できる</li>
       </ul>`,
   },
   {
@@ -523,13 +544,7 @@ color = mix(fogColor, color, T);`),
     id: 'end',
     layout: 'text',
     title: 'おわり',
-    body: `
-      <p><a href="./play.html">Playground</a></p>
-      <p>
-        <a href="https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/" target="_blank" rel="noreferrer">ブログ</a> ·
-        <a href="https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8" target="_blank" rel="noreferrer">Pickles Note</a> ·
-        <a href="https://github.com/shivaduke28/yuruyuru-shader-meetup" target="_blank" rel="noreferrer">ソース</a>
-      </p>`,
+    body: '<p><a href="./">トップへ戻る</a></p>',
     params: rgb,
   },
 ]

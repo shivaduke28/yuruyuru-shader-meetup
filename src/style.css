@@ -130,6 +130,41 @@ body.slides {
   display: none;
 }
 
+/* 表紙: デモをステージ全体の背景に敷き、見出しと本文を下寄せで重ねる */
+.stage.layout-cover .content {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  display: block;
+  z-index: 0;
+}
+
+.stage.layout-cover .demo {
+  border-radius: 0;
+}
+
+.stage.layout-cover .side {
+  display: none;
+}
+
+.stage.layout-cover .title,
+.stage.layout-cover .body {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+}
+
+.stage.layout-cover .title {
+  margin-top: auto;
+  font-size: 120px;
+}
+
+.stage.layout-cover .body {
+  flex: none;
+  font-size: 42px;
+  color: var(--fg-dim);
+}
+
 /* 区切りのページ: 見出しなしで中央に 1 文だけ大きく */
 .stage.layout-text .body .banner {
   font-size: 120px;
