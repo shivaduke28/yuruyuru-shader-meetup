@@ -1,4 +1,3 @@
-import '../style.css'
 import 'highlight.js/styles/github-dark.css'
 import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, FOG_MIX_OPTIONS } from '../fog/renderer'
 import {

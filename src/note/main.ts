@@ -1,4 +1,3 @@
-import '../style.css'
 import 'katex/dist/katex.min.css'
 import 'highlight.js/styles/github-dark.css'
 import renderMathInElement from 'katex/contrib/auto-render'

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
-ゆるゆるシェーダー交流会 #2 の LT「指数関数高さフォグ」のインタラクティブスライドと Playground。
-発表内容の方針は README.md を正とする（難しいことは説明しない、導出は出さない、パラメータを RGB ごとに変えると面白い）。
+ゆるゆるシェーダー交流会 #2（https://connpass.com/event/405564/）の LT「指数関数高さフォグ」のインタラクティブスライドと Playground と解説。
+発表の方針: 難しいことは説明しない、導出は出さない、パラメータを RGB ごとに変えると面白い。5 分程度。README.md は交流会と公開 URL のリンクだけ。
 
 ## コマンド
 
@@ -19,7 +19,7 @@ glslangValidator src/fog/glsl/fullscreen.vert src/fog/glsl/fog.frag   # シェ�
 ## 構成
 
 ```
-index.html        トップ。スライド・Playground・解説へのリンク
+index.html        トップ。スライド・Playground・解説・ソースコードへの箇条書きのリンクだけ（説明文は置かない）
 slides.html       スライド (src/slides/)
 play.html         Playground (src/play/)
 note.html         解説ページ (src/note/)。理論と実装、近似の一覧。数式は KaTeX の auto-render、コードは highlight.js
@@ -32,7 +32,7 @@ src/fog/          スライドと Playground が共有する部分
 src/slides/
   slides.ts       スライドの定義（title / side / body / params / controls / randomize）
   main.ts         ページ送り（矢印キー。タッチ端末ではタップ: 右 3/4 で次、左 1/4 で前。ペイン上とドラッグは除く）、トゥイーン、枠への自動縮小
-src/style.css     スライド・Playground・トップのスタイル
+src/style.css     全ページ共通のスタイル。各 HTML の <head> から <link> で読む（JS から import すると dev で一瞬無装飾になる）。トップは JS なし
 ```
 
 ## 設計上の決めごと
@@ -160,7 +160,8 @@ src/style.css     スライド・Playground・トップのスタイル
 
 ## 参考資料
 
-- 元ネタのブログと数式の詳細（Pickles Note の Gist）は README.md のリンク
+- 元ネタのブログ: https://blog.shivaduke28.net/entries/2026-08-08-pickles-height-fog/
+- 数式と近似の詳細（Pickles Note の Gist）: https://gist.github.com/shivaduke28/27e873db5cbc0cd4ba3e0c4c7fc455d8
 - Pickles 本体（Unity 用シェーダー）は別リポジトリ。実装を確認したいときはローカルの Pickles リポジトリを参照する
 
 ## 作業の進め方

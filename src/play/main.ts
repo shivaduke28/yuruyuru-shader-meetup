@@ -1,4 +1,3 @@
-import '../style.css'
 import { Pane } from 'tweakpane'
 import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, FOG_MIX_OPTIONS, MIN_SUN_ELEVATION } from '../fog/renderer'
 import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
