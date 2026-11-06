@@ -226,6 +226,21 @@ window.addEventListener(
   { capture: true },
 )
 
+// タッチ端末ではタップでページ送り。右 3/4 で次へ、左 1/4 で前へ。
+// ペインの上のタップとドラッグ (カメラ操作) は除く。指で動かした距離と時間でタップを判定する
+let tap: { x: number; y: number; time: number } | null = null
+window.addEventListener('pointerdown', (e) => {
+  tap = e.pointerType === 'touch' && !paneEl.contains(e.target as Node) ? { x: e.clientX, y: e.clientY, time: e.timeStamp } : null
+})
+window.addEventListener('pointerup', (e) => {
+  if (!tap) return
+  const moved = Math.hypot(e.clientX - tap.x, e.clientY - tap.y)
+  const held = e.timeStamp - tap.time
+  tap = null
+  if (moved > 10 || held > 300) return
+  go(e.clientX < window.innerWidth / 4 ? -1 : 1)
+})
+
 window.addEventListener('hashchange', () => show(readHash()))
 
 // パラメータのトゥイーン（描画は renderer 側の rAF）

@@ -31,7 +31,7 @@ src/fog/          スライドと Playground が共有する部分
   controls.ts     Tweakpane のバインディング。controlPresets にスライダーの定義
 src/slides/
   slides.ts       スライドの定義（title / side / body / params / controls / randomize）
-  main.ts         ページ送り、トゥイーン、枠への自動縮小
+  main.ts         ページ送り（矢印キー。タッチ端末ではタップ: 右 3/4 で次、左 1/4 で前。ペイン上とドラッグは除く）、トゥイーン、枠への自動縮小
 src/style.css     スライド・Playground・トップのスタイル
 ```
 
