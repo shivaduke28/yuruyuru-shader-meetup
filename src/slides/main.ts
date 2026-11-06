@@ -1,6 +1,6 @@
 import '../style.css'
 import 'highlight.js/styles/github-dark.css'
-import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, FOG_MIX_OPTIONS } from '../fog/renderer'
 import {
   assignParams,
   cloneParams,
@@ -92,6 +92,7 @@ const show = (i: number) => {
   renderer.sunInscatterShadow = slide.sunShadow ?? false
   // ノイズはスライドごとに既定値に戻す (前のスライドでスライダーを動かしても持ち越さない)
   renderer.phaseG = slide.phaseG ?? 0
+  renderer.fogMixMode = slide.fogMixMode ?? 0
   const noise = { ...DEFAULT_NOISE, ...slide.noise }
   renderer.noise = slide.noise !== undefined
   renderer.noiseScale = noise.scale
@@ -115,7 +116,14 @@ const show = (i: number) => {
   // フォグを面に適用するスライドでは、オンオフのトグルを別のカードに出す
   const showToggle = (k: 'fogAmbient' | 'fogSun' | 'sunShadow' | 'noise') =>
     slide[k] !== undefined && (slide.toggles === undefined || slide.toggles.includes(k))
-  if (showToggle('fogAmbient') || showToggle('fogSun') || showToggle('sunShadow') || showToggle('noise') || slide.phaseG !== undefined) {
+  if (
+    showToggle('fogAmbient') ||
+    showToggle('fogSun') ||
+    showToggle('sunShadow') ||
+    showToggle('noise') ||
+    slide.phaseG !== undefined ||
+    slide.fogMixMode !== undefined
+  ) {
     extraPane = new Pane({ container: paneEl })
     const toggles = {
       skyAttenuation: renderer.skyAttenuation,
@@ -151,6 +159,9 @@ const show = (i: number) => {
     }
     if (slide.phaseG !== undefined) {
       extraPane.addBinding(renderer, 'phaseG', { label: 'phase g', min: -0.9, max: 0.9, step: 0.01 })
+    }
+    if (slide.fogMixMode !== undefined) {
+      extraPane.addBinding(renderer, 'fogMixMode', { label: 'mix', options: FOG_MIX_OPTIONS })
     }
     if (showToggle('noise')) {
       extraPane.addBinding(renderer, 'noise', { label: 'noise' })

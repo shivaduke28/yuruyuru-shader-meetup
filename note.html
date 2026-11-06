@@ -13,7 +13,7 @@
 
       <h1>指数関数高さフォグ: 理論と実装</h1>
       <p class="note-lead">
-        このリポジトリの Playground とスライドが何を計算しているか、ボリュームレンダリング方程式から順に説明する。
+        指数関数高さフォグとその周りの表現が何を計算しているか、ボリュームレンダリング方程式から順に説明する。
         どの積分を厳密に評価し、どこで近似を入れているかを明示する。コードは <code>src/fog/glsl/fog.frag</code> から引いている。
       </p>
 
@@ -22,12 +22,13 @@
           <li><a href="#notation">記法とボリュームレンダリング方程式</a></li>
           <li><a href="#distance-fog">距離フォグ</a></li>
           <li><a href="#height-fog">指数関数高さフォグ</a></li>
-          <li><a href="#fog-color">フォグの色: アルベドと発光</a></li>
+          <li><a href="#fog-color">アルベドと発光</a></li>
           <li><a href="#sun">太陽光</a></li>
           <li><a href="#surface-ambient">サーフェスに届く環境光</a></li>
           <li><a href="#phase">位相関数</a></li>
           <li><a href="#god-rays">光芒: 影つきの数値積分</a></li>
           <li><a href="#noise">ノイズ</a></li>
+          <li><a href="#fog-mix">高さフォグと距離フォグを両方使う</a></li>
           <li><a href="#approximations">近似の一覧</a></li>
           <li><a href="#references">参考文献</a></li>
         </ol>
@@ -39,7 +40,7 @@
       <ul>
         <li>\(\sigma(x)\): 散乱係数。単位長さあたり、光が散乱される割合</li>
         <li>\(\alpha(x)\): 吸収係数</li>
-        <li>\(\kappa(x) := \sigma(x) + \alpha(x)\): 消散係数。単位は \(\mathrm{m}^{-1}\)。パラメータ density（高さフォグの \(a\)、3 節）と uniformDensity（距離フォグの \(\kappa_u\)）はこの \(\kappa\) の値である。スライドでは「濃さ」と言っている</li>
+        <li>\(\kappa(x) := \sigma(x) + \alpha(x)\): 消散係数。単位は \(\mathrm{m}^{-1}\)（シーンの座標の 1 単位を 1 m とする）。パラメータ density（高さフォグの \(a\)、3 節）と uniformDensity（距離フォグの \(\kappa_u\)）はこの \(\kappa\) の値である</li>
         <li>\(\rho(x) := \sigma(x) / \kappa(x)\): 散乱アルベド。\(0 \le \rho \le 1\) で、1 なら吸収なし</li>
         <li>\(\tau(x, y) := \int_x^y \kappa(p)\,\lVert dp \rVert\): 光学的深さ。\(x\) から \(y\) までの消散係数の線積分</li>
         <li>\(T(x, y) := \exp(-\tau(x, y))\): 透過率（Beer–Lambert の法則）</li>
@@ -47,14 +48,13 @@
           この文書では 2 つの向きのなす角 \(\theta\) だけに依存するとして \(\beta(\cos\theta)\) とも書く</li>
       </ul>
       <p>
-        シーンは \(y = 0\) の床と、\(xz\) 平面に 8 単位間隔で並ぶ高さ 12 の柱である。
         カメラ位置 \(c\)（コードの <code>ro</code>）、サーフェスの点 \(p\)、距離 \(d = \lVert p - c \rVert\)（当たらなければ \(d = \infty\)）、
         レイの向き \(\mathrm{rd} = (p - c) / d\)（カメラから遠ざかる単位ベクトル。コードの <code>rd</code>）、レイ上の点 \(x_t := c + t\,\mathrm{rd}\)（\(0 \le t \le d\)）とする。
       </p>
       <p>
         後の節で使う記号とコードの対応: 環境光 \(L_a\) = <code>ambient</code>、アルベド \(\rho\) = <code>albedo</code>、発光 \(E\) = <code>emission</code>、
         太陽の色 × 強さ \(I\) = <code>u_lightColor</code>、太陽の向き \(l\) = <code>u_lightDir</code>、高さフォグの \(a, f, h\) = <code>density</code>, <code>falloff</code>, <code>baseHeight</code>、
-        距離フォグの \(\kappa_u\) = <code>uniformDensity</code>。画面に出す色はコードの <code>col</code>。
+        距離フォグの \(\kappa_u\) = <code>uniformDensity</code>、距離フォグのアルベド \(\rho_u\) = <code>uniformAlbedo</code>。画面に出す色はコードの <code>col</code>。
       </p>
       <p>カメラに届く放射輝度は、ボリュームレンダリング方程式で</p>
       \[
@@ -66,14 +66,11 @@
       <p>
         と書ける。右辺の第 1 項はサーフェスの色 \(L_o\) が透過して届く分、第 2 項はレイ上の各点でフォグが散乱する光
         \(\sigma L_s\) と発光 \(L_e\) が、そこからカメラまでの透過率 \(T(c, x_t)\) で減衰して届く分（内散乱）である。
-        散乱項 \(L_s\) は、その点に全方向から入ってくる光 \(L_i\) を位相関数で重みづけして足したもの
+        散乱項 \(L_s\) は、その点に全方向から入ってくる光 \(L_i\) を位相関数で重みづけして足したものである。
       </p>
       \[
         L_s(x) := \int_{S^2} \beta(x, -\mathrm{rd}, \omega)\,L_i(x, \omega)\,d\omega .
       \]
-      <p>
-        この文書で扱うのは、フォグで 1 回だけ散乱した光（単散乱）である。2 回以上散乱した光（多重散乱）は入れない。
-      </p>
 
       <!-- ------------------------------------------------------------ -->
       <h2 id="distance-fog">2. 距離フォグ</h2>
@@ -92,16 +89,15 @@
       <pre><code class="language-glsl">vec3 fogColor = ambient;
 float T = exp(-density * dist); // 透過率: 距離 dist で残る光の割合
 color = mix(fogColor, color, T);</code></pre>
-      <p>上で置いた仮定のうち、スライドで 1 つずつ外していくのは次の 3 つである。</p>
+      <p>上で置いた仮定のうち、以下の節で 1 つずつ外していくのは次の 3 つである。</p>
       <ul>
         <li>フォグの消散係数 \(\kappa\) がシーン内で均一（→ 高さフォグで外す）</li>
         <li>フォグを照らす光が全方向から同じ色で当たる（→ 太陽光で外す）</li>
         <li>光が全方向に均一に散乱する（→ 位相関数で外す）</li>
       </ul>
       <p>
-        <strong>距離フォグにアルベドと発光がない理由</strong>。
-        このリポジトリでは空を単色にして、その色をサーフェスの環境光 \(L_a\) としても使っている。
-        距離フォグはシーン全体に無限に広がるので、サーフェスに届く環境光はフォグの色と一致しているのが自然であると判断した。
+        <strong>距離フォグのアルベド</strong>。距離フォグに対してアルベド \(\rho_u\)（厳密には散乱アルベド）を考えると、内散乱は \(L_a\rho_u\,(1 - e^{-\kappa d})\) になり、環境光と内散乱の色を別にできる。
+        しかし距離フォグが無限に広がっていることを考えると、環境光や空の色と同じ（\(\rho_u = 1\)）である方が自然、という見方もある。
       </p>
 
       <!-- ------------------------------------------------------------ -->
@@ -111,7 +107,7 @@ color = mix(fogColor, color, T);</code></pre>
         \kappa(p) = a\,\exp\bigl(-f\,(p_y - h)\bigr), \qquad a &gt; 0,\ f &gt; 0
       \]
       <p>
-        \(a\) は基準の高さ \(h\) での消散係数（density）、\(f\) は上に行くほど薄くなる速さ（falloff）である。
+        \(a\) は高さ \(h\) での消散係数（density）、\(f\) は減衰の速さ（falloff）、\(h\) は減衰が始まる高さ（baseHeight）である。
         レイ上の点 \(x_t = c + t\,\mathrm{rd}\) では \((x_t)_y = c_y + t\,\mathrm{rd}_y\) なので、光学的深さは初等的に積分できる。
       </p>
       \[
@@ -122,18 +118,23 @@ color = mix(fogColor, color, T);</code></pre>
         \end{aligned}
       \]
       <p>
-        \(\mathrm{rd}_y \to 0\)（水平なレイ）では \(a e^{-f(c_y - h)} d\) が極限で、距離フォグと同じ形になる。
-        \(\mathrm{rd}_y &lt; 0\)（見下ろすレイ）で \(d = \infty\) なら \(\tau = \infty\)、つまり床がなければ地平線より下は \(T = 0\) でフォグの色になる。
-        \(\mathrm{rd}_y &gt; 0\)（見上げるレイ）なら \(d = \infty\) でも \(\tau = \frac{a e^{-f(c_y - h)}}{f\,\mathrm{rd}_y}\) で有限にとどまる。
+        \(\mathrm{rd}_y = 0\) でも発散せず、極限は \(a e^{-f(c_y - h)}\,d\) である。
+        \(d = \infty\) のとき、\(\mathrm{rd}_y &gt; 0\) なら \(\tau(c, x_d) = \frac{a e^{-f(c_y - h)}}{f\,\mathrm{rd}_y}\)、\(\mathrm{rd}_y \le 0\) なら \(\tau(c, x_d) = \infty\) である。
       </p>
-      <pre><code class="language-glsl">// 消散係数   kappa(p) = a * exp(-f * (p.y - h))
+      <p>コードでは \(a, f, h\) を vec3 にして、RGB ごとに別の値を持たせている。</p>
+      <pre><code class="language-glsl">// exp の引数を float の範囲内で止める。d = 1e5 のレイや遠い終点で exp が inf になると、density = 0 のとき 0 × inf = NaN になる
+vec3 expClamped(vec3 x) {
+  return exp(min(x, vec3(80.0)));
+}
+
+// 消散係数   kappa(p) = a * exp(-f * (p.y - h))
 // 光学的深さ tau = a * exp(-f * (c.y - h)) * (1 - exp(-f * rd.y * d)) / (f * rd.y)
 vec3 heightFogOpticalDepth(vec3 c, vec3 rd, float d, vec3 a, vec3 f, vec3 h) {
   vec3 k0 = a * exp(-f * (c.y - h)); // カメラ位置での消散係数
   vec3 fv = f * rd.y;
   bvec3 isFlat = lessThan(abs(fv), vec3(1e-4));
   vec3 fvSafe = mix(fv, vec3(1.0), vec3(isFlat));
-  vec3 slanted = k0 * (1.0 - exp(-fvSafe * d)) / fvSafe;
+  vec3 slanted = k0 * (1.0 - expClamped(-fvSafe * d)) / fvSafe;
   vec3 horizontal = k0 * d;
   return mix(slanted, horizontal, vec3(isFlat));
 }
@@ -141,191 +142,109 @@ vec3 heightFogOpticalDepth(vec3 c, vec3 rd, float d, vec3 a, vec3 f, vec3 h) {
 vec3 fogTransmittance(vec3 c, vec3 rd, float d) {
   vec3 tau = heightFogOpticalDepth(c, rd, d, u_density, u_falloff, u_baseHeight)
            + u_uniformDensity * d;
-  return exp(-min(tau, vec3(60.0)));
+  return exp(-tau);
 }</code></pre>
-      <p>
-        \(a, f, h\) はすべて vec3 で、RGB ごとに別の値を持てる。光学的深さが線形なので、高さフォグと距離フォグ（uniformDensity）の
-        光学的深さは単に足せばよい。\(\exp\) の引数は 60 で止めている（\(\tau = \infty\) になるレイで後の計算に inf が混ざらないようにする。\(e^{-60}\) は 0 と区別がつかない）。
-      </p>
 
       <!-- ------------------------------------------------------------ -->
-      <h2 id="fog-color">4. フォグの色: アルベドと発光</h2>
+      <h2 id="fog-color">4. アルベドと発光</h2>
       <p>
-        アルベド \(\rho\) を定数と仮定する。高さフォグでも \(L_s = L_a\) はレイ上で一定である。\(T(c, x_t) = \exp\bigl(-\int_0^t \kappa(x_s)\,ds\bigr)\) を \(t\) で微分すると
-        \(\frac{d}{dt}T(c, x_t) = -\kappa(x_t)\,T(c, x_t)\) なので、内散乱は
+        アルベド \(\rho\) を定数、発光を \(\kappa\) に比例する \(L_e(x) = E\,\kappa(x)\)（\(E\) は定数）、環境光を定数 \(L_a\) とする
+        （\(L_e\) を定数にすると \(\int_0^d T(c, x_t)\,dt\) が指数積分になって初等関数で閉じないので、\(\kappa\) に比例させる）。
+        高さフォグでも \(L_s(x) = L_a\) はレイ上で一定なので、被積分関数は \(T(c, x_t)\,\kappa(x_t)\,(L_a\rho + E)\) になる。
+        \(\frac{d}{dt}T(c, x_t) = -\kappa(x_t)\,T(c, x_t)\) を使うと、内散乱は
       </p>
       \[
         \begin{aligned}
-        \int_0^d T(c, x_t)\,\sigma(x_t)\,L_a\,dt
-        &= \rho\,L_a \int_0^d T(c, x_t)\,\kappa(x_t)\,dt \\
-        &= -\rho\,L_a \int_0^d \frac{d}{dt}T(c, x_t)\,dt \\
-        &= \rho\,L_a\,\bigl(1 - T(c, x_d)\bigr)
+        \int_0^d T(c, x_t)\,\bigl(\sigma(x_t)\,L_a + L_e(x_t)\bigr)\,dt
+        &= (L_a\rho + E) \int_0^d T(c, x_t)\,\kappa(x_t)\,dt \\
+        &= -(L_a\rho + E) \int_0^d \frac{d}{dt}T(c, x_t)\,dt \\
+        &= (L_a\rho + E)\,\bigl(1 - T(c, x_d)\bigr)
         \end{aligned}
       \]
       <p>
-        になる。発光 \(L_e\) も \(\kappa\) に比例すると仮定して \(L_e(x) = E\,\kappa(x)\) と書く（\(E\) は定数。\(L_e\) を定数にすると
-        \(\int_0^d T\,dt\) が指数積分になって初等関数で閉じない）。発光項は同じ変形で
+        になる。\(1 - T(c, x_d)\) に掛かる \(L_a\rho + E\) が、コードで <code>fogColor = ambient * albedo + emission</code> と書いているものである。
       </p>
-      \[
-        \begin{aligned}
-        \int_0^d T(c, x_t)\,L_e(x_t)\,dt &= E \int_0^d T(c, x_t)\,\kappa(x_t)\,dt \\
-        &= E\,\bigl(1 - T(c, x_d)\bigr)
-        \end{aligned}
-      \]
-      <p>
-        になり、散乱と足し合わせると
-      </p>
-      \[
-        \bigl(1 - T(c, x_d)\bigr)\,(L_a\,\rho + E)
-      \]
-      <p>
-        である。\(L_a\rho + E\) がフォグの色で、スライドのコードでは <code>fogColor = ambient * albedo + emission</code> と書いている。
-      </p>
-      <p>
-        <strong>高さフォグと距離フォグが混ざるとき</strong>。Playground で両方を入れると、消散係数は \(\kappa = \kappa_h + \kappa_u\)（\(\kappa_h\) は高さフォグ、\(\kappa_u\) は距離フォグ）で、
-        高さフォグだけの光学的深さを \(\tau_h(t) := \int_0^t \kappa_h(x_s)\,ds\) と書けば、透過率は \(T(c, x_t) = e^{-\tau_h(t) - \kappa_u t}\) と光学的深さを足すだけでよい。しかし色が違う。高さフォグの色は \(L_a\rho + E\)、距離フォグの色は \(L_a\) なので、内散乱は
-      </p>
-      \[
-        \begin{aligned}
-        &\int_0^d T(c, x_t)\,\bigl[(L_a\rho + E)\,\kappa_h(x_t) + L_a\,\kappa_u\bigr]\,dt \\
-        &= (L_a\rho + E)\underbrace{\int_0^d T\,\kappa_h\,dt}_{I_h} + L_a\underbrace{\int_0^d T\,\kappa_u\,dt}_{I_u}
-        \end{aligned}
-      \]
-      <p>
-        になる。\(I_h = \int_0^d e^{-\tau_h(t) - \kappa_u t}\,\kappa_h(t)\,dt\) は初等的に解けないので、次の近似値を使う。
-      </p>
-      \[
-        I_h \approx A := \frac{1 - e^{-\tau_h(d)}}{1 + \kappa_u\,t_h}, \quad
-        I_u \approx B := \frac{1 - e^{-\kappa_u d}}{1 + \tau_h(t_u)}
-      \]
-      <p>
-        \(t_h\) と \(t_u\) は、それぞれのフォグが散乱する距離の代表値で
-      </p>
-      \[
-        \begin{aligned}
-        \tau_h(t_h) &= 1 \\
-        t_u &:= \frac{\int_0^d t\,\kappa_u e^{-\kappa_u t}\,dt}{\int_0^d \kappa_u e^{-\kappa_u t}\,dt}
-        = \frac{1}{\kappa_u} - \frac{d\,e^{-\kappa_u d}}{1 - e^{-\kappa_u d}}
-        \end{aligned}
-      \]
-      <p>
-        とする（\(\tau_h(d) \lt 1\) で \(t_h\) がないレイでは \(1/(f\,\mathrm{rd}_y)\) に連続につなぐ）。
-        分母を \(e^{-\kappa_u t_h}\) ではなく \(1/(1 + \kappa_u t_h)\) にしたのは、水平なレイで \(d = \infty\) のとき \(I_h = \kappa_h / (\kappa_h + \kappa_u)\) に一致するからである。
-        コードでは <code>fogMixFactors</code> が分母の逆数 <code>hf</code>、<code>uf</code> を、<code>fogScatterWeights</code> が \(A\)、\(B\)（<code>wa</code>、<code>wb</code>）を返す。
-        数値積分した \(I_h\)、\(I_u\) との差は、既定のパラメータに距離フォグ 0.005〜0.08 を加えた範囲で最大 0.06。片方のフォグしかなければ厳密。内散乱は
-      </p>
-      \[
-        \bigl(1 - T(c, x_d)\bigr)\,\frac{(L_a\rho + E)\,A + L_a\,B}{A + B}
-      \]
-      <p>
-        とする（<code>fogScatterWeights</code>、<code>mixByScatter</code>）。\(A + B\) で割るのは、\(I_h + I_u = 1 - T\) は厳密だが \(A + B\) はそうではないので、
-        近似を色の混ぜ方だけに入れて合計は厳密な \(1 - T\) に合わせるためである。
-        コードの <code>mixByScatter(h, u, wa, wb)</code> は \((h\,A + u\,B) / (A + B)\) を返す。
-      </p>
-      <pre><code class="language-glsl">vec3 T = fogTransmittance(ro, rd, d);
-vec3 wa, wb;
-fogScatterWeights(ro, rd, d, wa, wb);
-vec3 inscatter = u_ambient * mixByScatter(u_albedo, vec3(1.0), wa, wb) * (1.0 - T);
-col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 - T);</code></pre>
 
       <!-- ------------------------------------------------------------ -->
       <h2 id="sun">5. 太陽光</h2>
       <p>
-        太陽は平行光源で、向き \(l\)（光源へ向かう単位ベクトル、\(l_y &gt; 0\)）、放射照度 \(\pi I\) とする（\(I\) はコードの <code>u_lightColor</code>。\(\pi\) を付けると、反射率 \(\rho_s\) の Lambert 面の反射輝度が \(\rho_s I\) になる）。
-        入射する放射輝度はデルタ関数 \(L_i(x, \omega) = \pi I\,\delta(\omega - l)\,T_l(x)\) で、\(T_l(x)\) はその点から太陽までのフォグの透過率である。
-        散乱項は
-      </p>
-      \[
-        L_s(x) = \pi\,\beta(\cos\theta)\,I\,T_l(x), \qquad \cos\theta := \mathrm{rd} \cdot l
-      \]
-      <p>
-        となる。\(\theta\) は光の進む向き \(-l\) と、散乱してカメラへ向かう向き \(-\mathrm{rd}\) のなす角で、太陽を見るレイ（\(\mathrm{rd} = l\)）で \(\cos\theta = 1\)。
-        位相関数の部分 \(\pi\beta(\cos\theta)\) はレイ上で定数（\(\mathrm{rd}\) も \(l\) も変わらない）なので積分の外に出る。等方散乱 \(\beta = 1/4\pi\) なら \(1/4\) で、
-        コードの <code>sunPhase</code> は \(\pi\beta\) を返し、\(g = 0\) で 0.25 になる（7 節）。
-        太陽光が高さフォグに関わる経路は 3 つあり、Playground とスライドでは別々のトグルにしている。エネルギー保存を保つなら 3 つとも入れる。
+        太陽は向き \(l\)（光源へ向かう単位ベクトル、\(l_y &gt; 0\)）の平行光源とし、色と強さを \(I\)（反射率 1 の Lambert 面が輝度 \(I\) で見える強さ。コードの <code>u_lightColor</code>）とする。
+        太陽光が高さフォグに関わる経路は、サーフェスに届く太陽光の減衰、カメラへの内散乱、サーフェスへの内散乱の 3 つで、以下順に書く。エネルギー保存を保つなら 3 つとも入れる。
       </p>
 
       <h3>5.1 太陽の減衰（sun attenuation）</h3>
       <p>
-        サーフェスの点 \(p\) に届く太陽光は \(\pi I\,T_l(p)\) で、\(T_l\) は \(p\) から太陽の向き \(l\) に無限遠までの透過率、\(\tau_l\) はその光学的深さである。
-        3 節の式で \(c = p\)、\(\mathrm{rd} = l\)、\(d = \infty\) とすれば
+        点 \(p\) から向き \(\omega\) に無限遠までの透過率を \(T_\infty(p, \omega) := \exp\bigl(-\int_0^\infty \kappa(p + t\omega)\,dt\bigr)\) と書く。
+        サーフェスの点 \(p\) に届く太陽光は、フォグがないときの \(T_\infty(p, l)\) 倍になる。3 節の式で \(c = p\)、\(\mathrm{rd} = l\)、\(d = \infty\) とすれば
       </p>
       \[
         \begin{aligned}
-        \tau_l(p) &= \frac{a\, e^{-f(p_y - h)}}{f\, l_y} = \frac{\tau_\uparrow(p)}{l_y} \\
+        \tau_\infty(p, l) &= \frac{a\, e^{-f(p_y - h)}}{f\, l_y} = \frac{\tau_\uparrow(p)}{l_y} \\
         \tau_\uparrow(p) &:= \frac{\kappa(p)}{f} \\
-        T_l(p) &= e^{-\tau_l(p)}
+        T_\infty(p, l) &= e^{-\tau_\infty(p, l)}
         \end{aligned}
       \]
       <p>
         である。\(\tau_\uparrow(p)\) は高さ \(p_y\) から真上に無限遠までの光学的深さで、コードの <code>tauFromTop</code> である。
-        <code>sunTransmittance</code> は <code>heightFogOpticalDepth</code> に \(d = 10^5\) を渡しているが、値は \(e^{-\tau_\uparrow(p)/l_y}\) と同じである。
-        距離フォグの光学的深さは無限遠まで \(\kappa_u t\) で増えるので \(T_l = 0\) になる。太陽が常に消えるのは意図しない結果なので、太陽の減衰には距離フォグを入れない。
       </p>
       <pre><code class="language-glsl">// 真上に無限遠までの高さフォグの光学的深さ tau(y) = kappa(y) / f
 vec3 tauFromTop(float y) {
-  return u_density * exp(-u_falloff * (y - u_baseHeight)) / u_falloff;
+  return u_density * expClamped(-u_falloff * (y - u_baseHeight)) / u_falloff;
 }
 
 vec3 sunTransmittance(vec3 p) {
   if (!u_sunAttenuation) return vec3(1.0);
-  vec3 tau = heightFogOpticalDepth(p, u_lightDir, 1e5, u_density, u_falloff, u_baseHeight);
-  return exp(-min(tau, vec3(60.0)));
+  return exp(-tauFromTop(p.y) / u_lightDir.y);
 }</code></pre>
 
       <h3>5.2 カメラへの内散乱（sun inscatter）</h3>
-      <p>太陽光の内散乱は、ボリュームレンダリング方程式の散乱項に上の \(L_s\) を入れて</p>
+      <p>太陽光による散乱項は</p>
       \[
-        \pi\beta(\cos\theta)\, I\, \rho \int_0^d T(c, x_t)\,\kappa(x_t)\,T_l(x_t)\,dt
+        L_s(x) = \pi\,\beta(\cos\theta)\,I\,T_\infty(x, l), \qquad \cos\theta := \mathrm{rd} \cdot l
       \]
       <p>
-        である。\(T_l(x_t)\) が \(t\) に依存するので 4 節の \(\int T\kappa\,dt = 1 - T\) はそのまま使えないが、この積分は閉じる。
-        \(u(t) := \tau_\uparrow(x_t)\) と置くと、\(u(t) = u(0)\,e^{-f\,\mathrm{rd}_y t}\)、\(\kappa(x_t)\,dt = -du / \mathrm{rd}_y\)、
-        \(\tau(c, x_t) = (u(0) - u(t)) / \mathrm{rd}_y\) で、\(T_l = e^{s u}\)（\(s = -1/l_y\)）だから
+        である。\(\pi\beta(\cos\theta)\) はレイ上で定数なので積分の外に出る（コードの <code>sunPhase</code>。7 節。等方なら \(1/4\)）。
+        ボリュームレンダリング方程式の散乱項に入れると、太陽光の内散乱は
+      </p>
+      \[
+        \pi\beta(\cos\theta)\, I\, \rho \int_0^d T(c, x_t)\,\kappa(x_t)\,T_\infty(x_t, l)\,dt
+      \]
+      <p>
+        である。\(\tau_\uparrow(x_t) = \tau_\uparrow(c)\,e^{-f\,\mathrm{rd}_y t}\) なので、\(\xi = \tau_\uparrow(x_t)\) と変数変換すると
+        \(\kappa(x_t)\,dt = -\,d\xi / \mathrm{rd}_y\)、\(T(c, x_t) = e^{-(\tau_\uparrow(c) - \xi)/\mathrm{rd}_y}\)、\(T_\infty(x_t, l) = e^{-\xi/l_y}\) で、
       </p>
       \[
         \begin{aligned}
-        &\int_0^d T(c, x_t)\,\kappa(x_t)\,e^{s\,u(t)}\,dt \\
-        &= \frac{e^{s\,u(0)} - T(c, x_d)\,e^{s\,u(d)}}{1 + s\,\mathrm{rd}_y}
+        &\int_0^d T(c, x_t)\,\kappa(x_t)\,T_\infty(x_t, l)\,dt \\
+        &= \frac{e^{-\tau_\uparrow(c)/\mathrm{rd}_y}}{\mathrm{rd}_y} \int_{\tau_\uparrow(x_d)}^{\tau_\uparrow(c)} e^{\xi\,(1/\mathrm{rd}_y - 1/l_y)}\,d\xi \\
+        &= \frac{T_\infty(c, l) - T(c, x_d)\,T_\infty(x_d, l)}{1 - \mathrm{rd}_y / l_y}
         \end{aligned}
       \]
       <p>
-        となる。\(1 + s\,\mathrm{rd}_y = 0\)、つまり \(\mathrm{rd}_y = l_y\)（レイが太陽と同じ仰角で上がる方向）では被積分関数が \(\kappa\) の定数倍になり、極限は \(e^{s u(0)}\,\tau(c, x_d)\)。
-        \(s = 0\)（減衰なし）なら \(1 - T\) に戻る。
-        コードの <code>modeIntegral</code> がこれで、<code>tauCam</code> \(= u(0)\)、<code>tauEnd</code> \(= u(d)\)、<code>tauView</code> \(= \tau(c, x_d)\)、<code>off</code> \(= 0\) である。
-        太陽の減衰を入れないときは <code>modeIntegral</code> を呼ばず \(1 - T\) を直接使う。
+        となる。コードの <code>sunInscatter</code> がこれである。
       </p>
-      <pre><code class="language-glsl">// レイに沿った積分 ∫_0^d T(t) kappa(t) e^{s tau(t) + off} dt の閉じた形 (tau は真上に無限遠までの光学的深さ tauFromTop)
-vec3 modeIntegral(vec3 s, vec3 off, vec3 tauCam, vec3 tauEnd, vec3 tauView, float rdy) {
-  vec3 atCam = exp(s * tauCam + off);
-  vec3 atEnd = exp(-tauView + s * tauEnd + off);
-  vec3 den = 1.0 + s * rdy;
-  bvec3 sing = lessThan(abs(den), vec3(1e-2));
-  return mix((atCam - atEnd) / mix(den, vec3(1.0), vec3(sing)), atCam * tauView, vec3(sing));
-}
-
-vec3 sunInscatter(vec3 c, vec3 rd, float d) {
-  vec3 tauCam, tauEnd, tauView;
-  rayTaus(c, rd, d, tauCam, tauEnd, tauView);
+      <pre><code class="language-glsl">vec3 sunInscatter(vec3 c, vec3 rd, float d) {
+  vec3 tauView = heightFogOpticalDepth(c, rd, d, u_density, u_falloff, u_baseHeight);
+  vec3 Tview = exp(-tauView);
+  vec3 scatter;
+  if (!u_sunAttenuation) {
+    scatter = 1.0 - Tview;
+  } else {
+    vec3 TsunCam = sunTransmittance(c);
+    vec3 TsunEnd = sunTransmittance(c + rd * d);
+    float den = 1.0 - rd.y / u_lightDir.y;
+    scatter = abs(den) &lt; 1e-2 ? TsunCam * tauView : (TsunCam - Tview * TsunEnd) / den;
+  }
   vec3 hf, uf;
   fogMixFactors(c, rd, d, hf, uf);
-  vec3 scatter = u_sunAttenuation
-    ? modeIntegral(vec3(-1.0 / u_lightDir.y), vec3(0.0), tauCam, tauEnd, tauView, rd.y)
-    : 1.0 - exp(-tauView);
   return u_lightColor * sunPhase(dot(rd, u_lightDir)) * u_albedo * scatter * hf;
 }</code></pre>
-      <p>
-        \(T(c, x_t)\) に距離フォグが入ると \(e^{-\kappa_u t}\) が掛かって閉じなくなるので、4 節の \(A\) と同じ係数 \(1/(1 + \kappa_u t_h)\)（<code>hf</code>）を掛ける。
-        <code>uf</code> は \(B\) 側の係数で、ここでは使わない。距離フォグが 0 なら厳密である。
-        高さフォグが散乱した太陽光が距離フォグで薄まる分だけを見ていて、距離フォグ自身は太陽光を散乱しない（5.1 と同じ理由）。
-      </p>
 
       <h3>5.3 サーフェスへの内散乱（sun inscatter ambient）</h3>
       <p>
-        太陽光がフォグで散乱してサーフェスに届く分も単散乱（太陽 → フォグ → サーフェス）である。
-        正しくは、サーフェスの点 \(p\) から見た半球の全方向について 5.2 の積分を取り、法線との余弦で重みづけて足す。
+        太陽光がフォグで散乱してサーフェスに届く分は、正しくはサーフェスの点 \(p\) から見た半球の全方向について 5.2 の積分を取り、法線との余弦で重みづけて足す。
         これは閉じないので、空へ向かう代表方向 1 本 \(\hat\omega\)（6 節。コードの <code>SKY_DIR</code>）で \(d = \infty\) の内散乱を評価し、環境光に足す。
-        位相関数も、サーフェスから空へ向かう \(\hat\omega\) をレイの向きにして \(\cos\theta = \hat\omega \cdot l\) で評価する。代表方向 1 本というのがここの近似で、7 節の \(g\) が大きいほど誤差も大きい。
+        位相関数も \(\hat\omega\) をレイの向きにして \(\cos\theta = \hat\omega \cdot l\) で評価する。代表方向 1 本がここの近似で、7 節の \(g\) が大きいほど誤差も大きい。
       </p>
       <pre><code class="language-glsl">vec3 sunInscatterAmbient(vec3 p) {
   return sunInscatter(p, SKY_DIR, 1e5);
@@ -334,32 +253,28 @@ vec3 sunInscatter(vec3 c, vec3 rd, float d) {
       <!-- ------------------------------------------------------------ -->
       <h2 id="surface-ambient">6. サーフェスに届く環境光</h2>
       <p>
-        サーフェスの点 \(p\) に半球の向き \(\omega\) から届く環境光は、空の光 \(L_a\) がフォグを通り抜ける分と、途中のフォグが散乱して届く分の和で、
-        その向きの透過率を \(T(\omega)\) とすれば \(L_a T(\omega) + \rho L_a (1 - T(\omega))\) である（4 節と同じ計算）。
-        これを余弦重みで半球平均すると
+        サーフェスの点 \(p\)（法線 \(n\)）に向き \(\omega\) から届く環境光は、空の光 \(L_a\) がフォグを通り抜ける分と、途中のフォグが散乱して届く分の和で、
+        \(L_a\,T_\infty(p, \omega) + \rho\,L_a\,\bigl(1 - T_\infty(p, \omega)\bigr)\) である（4 節と同じ計算）。これを \(n\) の側の半球 \(\Omega\) で余弦重みつきで平均すると
       </p>
       \[
         \begin{aligned}
-        &L_a\,\langle T \rangle + \rho\,L_a\,\bigl(1 - \langle T \rangle\bigr) \\
-        &= L_a\Bigl(1 - (1 - \rho)\bigl(1 - \langle T\rangle\bigr)\Bigr) \\
-        \langle T \rangle &:= \frac{1}{\pi}\int_{H^2} T(\omega)\,(n \cdot \omega)\,d\omega
+        &L_a\,\Phi(p) + \rho\,L_a\,\bigl(1 - \Phi(p)\bigr), \\
+        \Phi(p) &:= \frac{1}{\pi}\int_{\Omega} T_\infty(p, \omega)\,(n \cdot \omega)\,d\omega
         \end{aligned}
       \]
       <p>
-        で、\(H^2\) は法線 \(n\) の側の半球である。\(\rho = 1\) なら \(L_a\) に戻る（吸収がなければフォグがあっても環境光は変わらない）。スライドと Playground ではこの 2 項を
-        sky attenuation と sky inscatter ambient の 2 つのトグルに分けている。
+        になる。\(\Phi(p)\) は半球平均透過率である。\(\rho = 1\) なら \(L_a\) に戻る。実装ではこの 2 項を sky attenuation と sky inscatter ambient の 2 つに分けて切り替えられる。
       </p>
       <p>
-        \(\langle T \rangle\) は閉じない。上向きのサーフェスでは、5.1 の \(\tau_\uparrow(p)\) を使って
-        \(\langle T \rangle = 2 E_3(\tau_\uparrow)\)、\(E_3(x) := \int_1^\infty e^{-xt}\,t^{-3}\,dt\) で、これは \(\exp(-1.5\,\tau_\uparrow)\) でよく近似できる
-        （半球平均を斜め 1 方向の透過率で代表する係数 1.5 を diffusivity factor と呼ぶ）。
-        \(1.5 = 1 / (2/3)\) なので、これは \(y\) 成分（天頂角の余弦）が \(2/3\) の代表方向 \(\hat\omega\) 1 本の透過率と同じである。
-        サーフェスの向きは見ない（側面も同じ \(\hat\omega\) を使う）。側面の半球は下半分が地面までのフォグを通るので、正しくは \(\langle T \rangle\) がこれより小さい。
-        地面の高さをシェーダーに持ち込まないために、この 1 本で済ませている。距離フォグは \(d = \infty\) で \(T = 0\) になるので含めない（5.1 と同じ理由）。
+        \(\Phi(p)\) の積分は初等関数で書けないので、天頂角の余弦が \(2/3\) の向き \(\hat\omega\) 1 本の値
+        \(T_\infty(p, \hat\omega) = e^{-1.5\,\tau_\uparrow(p)}\) で置き換える。上向きのサーフェス（\(n = (0, 1, 0)\)）では、\(\tau_\uparrow(p)\) がどの値でも
+        \(\lvert \Phi(p) - T_\infty(p, \hat\omega) \rvert \le 0.04\) である。
+        サーフェスの向きによらず同じ \(\hat\omega\) を使う。側面では \(\Omega\) の下半分が地面までのフォグを通るので、正しくは \(\Phi(p)\) はこれより小さいが、
+        地面の高さをシェーダーに持ち込まないために、この 1 本で済ませている。
       </p>
       <pre><code class="language-glsl">const vec3 SKY_DIR = vec3(0.0, 2.0 / 3.0, 0.745356); // 長さ 1、y = 2/3
 vec3 skyTransmittance(vec3 p) {
-  return exp(-min(tauFromTop(p.y) / SKY_DIR.y, vec3(60.0)));
+  return exp(-tauFromTop(p.y) / SKY_DIR.y);
 }
 
 vec3 shade(vec3 p, vec3 n) {
@@ -406,20 +321,22 @@ float sunPhase(float cosTheta) {
       <!-- ------------------------------------------------------------ -->
       <h2 id="god-rays">8. 光芒: 影つきの数値積分</h2>
       <p>
-        柱が太陽光を遮ると、フォグの中に影の境界が光芒として見える。5.2 の被積分関数に、点 \(x_t\) から太陽が見えるかの可視性 \(V(x_t) \in \{0, 1\}\) を掛けたもの
+        遮蔽物が太陽光を遮ると、フォグの中に影の境界が光芒として見える。5.2 の被積分関数に、点 \(x_t\) から太陽が見えるかの可視性 \(V(x_t) \in \{0, 1\}\) を掛けたもの
       </p>
       \[
-        \pi\beta(\cos\theta)\, I\, \rho \int_0^d T(c, x_t)\,\kappa(x_t)\,T_l(x_t)\,V(x_t)\,dt
+        \pi\beta(\cos\theta)\, I\, \rho \int_0^d T(c, x_t)\,\kappa(x_t)\,T_\infty(x_t, l)\,V(x_t)\,dt
       \]
       <p>
-        は閉じた式では書けないので、ここだけ数値積分する。レイを 48 単位まで 32 ステップの等間隔でレイマーチし、各点から太陽へ影のレイを飛ばして \(V\) を求める。
-        影のレイは柱だけを見るレイマーチ（<code>fogShadow</code>。SDF の値だけ進む sphere tracing を最大 24 ステップ、柱の上端まで）で、柱より上なら何もしない。
-        48 単位より先は影を無視して 5.2 の閉じた式に切り替え、手前の透過率をかけて足す。レイの透過率 \(T(c, x_t)\) が 0.005 を切ったら打ち切る。
+        は閉じた式では書けないので、ここだけ数値積分する。レイを等間隔のステップでレイマーチし、各サンプル点から太陽へ影のレイを飛ばして \(V(x_t)\) を求める。
+        影のレイはシーンの SDF に対する sphere tracing である（<code>fogShadow</code>）。
       </p>
       <p>
-        等間隔のサンプルは隣のピクセルで同じ位置に落ちるので、影の境界が縞になる。開始位置をピクセルごとのハッシュ（<code>hash21</code>）でずらして縞をざらつきに変え、
-        さらにフレームごとに黄金比で回して、同じピクセルの誤差が毎フレーム別方向にぶれるようにしている（目の中で平均される）。
-        ざらつきの大きさはステップの長さで決まり、ステップ数を 2 倍にすれば半分弱になる。
+        等間隔のサンプルは影の境界に縞を作るので、縞が出ないようにサンプルの開始位置をピクセルごと、フレームごとにジッターする。
+        誤差の大きさはステップの長さで決まり、ステップ数を 2 倍にすれば半分弱になる。
+      </p>
+      <p>
+        この実装では 32 ステップで 48 m まで歩き、その先は影を無視して 5.2 の閉じた式に切り替え、手前の透過率をかけて足す。
+        レイの透過率 \(T(c, x_t)\) が 0.005 を切ったら打ち切る。
       </p>
       <pre><code class="language-glsl">const int SHADOW_STEPS = 32;
 const float SHADOW_RANGE = 48.0;
@@ -445,31 +362,34 @@ vec3 sunInscatterShadowed(vec3 c, vec3 rd, float d, vec2 pix, vec3 R) {
   }
   return result;
 }</code></pre>
-      <p>サーフェスへの内散乱（5.3）は影を見ない。\(R\) は 9 節のノイズの平均で、ノイズなしなら 1 である。</p>
+      <p>サーフェスへの内散乱（5.3）は影を見ない。\(R\) は 9 節の \(\bar R(c, x_d)\) で、ノイズなしなら 1 である。</p>
 
       <!-- ------------------------------------------------------------ -->
       <h2 id="noise">9. ノイズ</h2>
       <p>
-        フォグにムラをつけるために、消散係数にノイズ \(r : \mathbb{R}^3 \to [r_{\min}, r_{\max}]\) をかけて \(\tilde\kappa(p) = r(p)\,\kappa(p)\) とする。
-        光学的深さは
+        フォグにムラをつけるために、消散係数にノイズ \(r : \mathbb{R}^3 \to [r_{\min}, r_{\max}]\) をかけて \(\tilde\kappa(p) := r(p)\,\kappa(p)\) とする。
+        光学的深さと透過率は
       </p>
       \[
         \begin{aligned}
-        \tilde\tau(c, x_d) &= \int_0^d r(x_t)\,\kappa(x_t)\,dt = \bar R\;\tau(c, x_d) \\
-        \bar R &:= \frac{\int_0^d r(x_t)\,\kappa(x_t)\,dt}{\int_0^d \kappa(x_t)\,dt}
+        \tilde\tau(c, x_d) &:= \int_0^d r(x_t)\,\kappa(x_t)\,dt = \bar R(c, x_d)\,\tau(c, x_d), \qquad
+        \bar R(c, x_d) := \frac{\int_0^d r(x_t)\,\kappa(x_t)\,dt}{\int_0^d \kappa(x_t)\,dt} \\
+        \tilde T(c, x_d) &:= e^{-\tilde\tau(c, x_d)} = T(c, x_d)^{\bar R(c, x_d)}
         \end{aligned}
       \]
       <p>
-        と書ける。これは \(\bar R\)（レイ上の \(r\) の \(\kappa\) 重み付き平均）の定義そのもので、<strong>厳密に</strong>成り立つ。
-        つまり閉じた式の \(\tau\) はそのまま使い、\(\bar R\) だけを見積もればよく、透過率は \(\tilde T = e^{-\bar R \tau} = T^{\bar R}\) になる。
-        スライドの「透過率を T の R 乗にする」はこれである。
+        になる。\(\tau(c, x_d)\) は 3 節の閉じた式のままで、\(\bar R(c, x_d)\) だけをサンプルで見積もる。
       </p>
       <p>
-        \(\bar R\) はレイ上の数点でノイズを読み、重み \(\kappa(x_{t_k})\) の重み付き平均で見積もる（区間の幅は掛けない）。
-        サンプルの位置は \(t_0 = 1\)、\(t_k = 1 + 1.4^k\)（\(k \ge 1\)）の 10 本（約 22 単位まで）でカメラの近くに固める。
-        等間隔 \(t_k = dk/N\) にするとサンプル位置がサーフェスからの距離で決まり、模様がサーフェスと一緒に動いて見える。
-        重みに区間の幅を掛けないのも同じ理由で、掛けると遠い区間が重くなり床の近くのサンプルが支配する。
-        距離 \(d\) を超えた最初のサンプルは、区間のうち \(d\) までの割合で線形補間（<code>mix</code>）して入れ、\(d\) について連続にする。
+        \(\bar R(c, x_d)\) は、分子と分母をサンプル点 \(x_{t_k}\) での数値積分で置き換えて見積もる。
+        \(t_0 = 1\)、\(t_k = 1 + 1.4^k\)（\(k \ge 1\)）の 10 点（約 22 m まで）をカメラの近くに固め、各点の重みを \(\kappa(x_{t_k})\,\Delta t_k\)、
+        \(\Delta t_k := \min(t_k, d) - t_{k-1}\)（\(t_{-1} := 0\)。\(d\) を超えた最初の点で止める。\(d\) が約 22 m より遠ければそこまでの平均）とすると
+      </p>
+      \[
+        \bar R(c, x_d) \approx \frac{\sum_k \kappa(x_{t_k})\,\Delta t_k\,r(x_{t_k})}{\sum_k \kappa(x_{t_k})\,\Delta t_k}
+      \]
+      <p>
+        である。等間隔 \(t_k = dk/N\) にするとサンプル位置がサーフェスまでの距離で決まり、模様がサーフェスと一緒に動いて見える。
       </p>
       <pre><code class="language-glsl">const int NOISE_SAMPLES = 10;
 const float NOISE_STEP_EXP = 1.4;
@@ -481,14 +401,11 @@ vec3 noiseMean(vec3 c, vec3 rd, float d) {
   float step = NOISE_STEP_EXP;
   for (int k = 0; k &lt; NOISE_SAMPLES; k++) {
     vec3 p = c + rd * t;
-    vec3 w = u_density * exp(-u_falloff * (p.y - u_baseHeight)) + u_uniformDensity + vec3(1e-6);
-    vec3 f = w * fogNoise(p);
-    if (k &gt; 0 &amp;&amp; t &gt; d) {
-      float ratio = (d - tPrev) / (t - tPrev);
-      return mix(sum / wsum, (sum + f) / (wsum + w), ratio);
-    }
-    sum += f;
+    vec3 kappa = u_density * exp(-u_falloff * (p.y - u_baseHeight)) + u_uniformDensity + vec3(1e-6);
+    vec3 w = kappa * (min(t, d) - tPrev); // 区間 [tPrev, t] のうち d までの幅
+    sum += w * fogNoise(p);
     wsum += w;
+    if (t &gt; d) break;
     tPrev = t;
     t = 1.0 + step;
     step *= NOISE_STEP_EXP;
@@ -502,17 +419,79 @@ vec3 R = u_noise ? noiseMean(ro, rd, d) : vec3(1.0);
 T = pow(T, R);</code></pre>
       <p>
         ノイズ \(r\) は 3 オクターブの 3D バリューノイズ（振幅 0.5, 0.25, 0.125）を \([0, 1]\) に正規化し、\(\operatorname{mix}(r_{\min}, r_{\max}, \cdot)\) で範囲に写したもので、上向きに流す。
-        カメラは \(+z\) に進み続けるので、\(z\) の格子をワールドの周期 512 で巻き、座標の巻き戻しで模様が飛ばないようにしている。
+        格子はワールド座標の周期（512）で巻いて、座標の巻き戻しで模様が飛ばないようにしている（この実装の都合）。
       </p>
       <p>
-        \(\bar R\) を使うのはレイの透過率と、8 節の光芒の数値積分（消散係数に \(\bar R\) をかけ、レイの透過率を \(T^{\bar R}\) にする）である。
+        \(\bar R(c, x_d)\) を使うのはレイの透過率と、8 節の光芒の数値積分（消散係数に \(\bar R(c, x_d)\) をかけ、レイの透過率を \(\tilde T(c, x_d)\) にする）である。
         光芒がノイズを見ないと、サーフェスの透過率だけにムラがつき光芒にはつかないので、ノイズが体積ではなく画面上の模様に見える。
         閉じた式の太陽の内散乱、太陽への透過率、サーフェスの環境光はノイズを見ない。これは意図した簡略化で、近似の一覧に載せる。
-        また \(\bar R\) はレイ 1 本につき 1 つの値なので、レイ方向のムラ（光芒の中の濃淡）は表現できない。
+        また \(\bar R(c, x_d)\) はレイ 1 本につき 1 つの値なので、レイ方向のムラ（光芒の中の濃淡）は表現できない。
       </p>
 
       <!-- ------------------------------------------------------------ -->
-      <h2 id="approximations">10. 近似の一覧</h2>
+      <h2 id="fog-mix">10. 高さフォグと距離フォグを両方使う</h2>
+      <p>
+        高さフォグと距離フォグを両方入れると、消散係数は \(\kappa = \kappa_h + \kappa_u\)（\(\kappa_h\) は高さフォグ、\(\kappa_u\) は距離フォグ）で、
+        高さフォグだけの光学的深さを \(\tau_h(t) := \int_0^t \kappa_h(x_s)\,ds\) と書けば、透過率は \(T(c, x_t) = e^{-\tau_h(t) - \kappa_u t}\) と光学的深さを足すだけでよい。しかし \(1 - T\) に掛かる係数は 2 つのフォグで違う。高さフォグは \(L_a\rho + E\)、距離フォグは \(L_a\rho_u\) なので、内散乱は
+      </p>
+      \[
+        \begin{aligned}
+        &\int_0^d T(c, x_t)\,\bigl[(L_a\rho + E)\,\kappa_h(x_t) + L_a\rho_u\,\kappa_u\bigr]\,dt \\
+        &= (L_a\rho + E)\underbrace{\int_0^d T(c, x_t)\,\kappa_h(x_t)\,dt}_{I_h} + L_a\rho_u\underbrace{\int_0^d T(c, x_t)\,\kappa_u\,dt}_{I_u}
+        \end{aligned}
+      \]
+      <p>
+        になる。係数が同じ（\(L_a\rho + E = L_a\rho_u =: C\)）なら \(\frac{d}{dt}T(c, x_t) = -\bigl(\kappa_h(x_t) + \kappa_u\bigr)\,T(c, x_t)\) から
+      </p>
+      \[
+        C\int_0^d T(c, x_t)\,\bigl(\kappa_h(x_t) + \kappa_u\bigr)\,dt = C\,\bigl(1 - T(c, x_d)\bigr)
+      \]
+      <p>
+        と閉じるが、係数が違うと \(I_h\) と \(I_u\) が別々に要る。\(\kappa_h(x_t)\,T(c, x_t)\) 単独は \(t\) の関数の微分の形にならず、
+        \(I_h = \int_0^d e^{-\tau_h(t) - \kappa_u t}\,\kappa_h(x_t)\,dt\) は初等的に解けないので、次の近似値を使う。
+      </p>
+      \[
+        I_h \approx A := \frac{1 - e^{-\tau_h(d)}}{1 + \kappa_u\,t_h}, \quad
+        I_u \approx B := \frac{1 - e^{-\kappa_u d}}{1 + \tau_h(t_u)}
+      \]
+      <p>
+        \(t_h\) と \(t_u\) は、それぞれのフォグが散乱する距離の代表値で
+      </p>
+      \[
+        \begin{aligned}
+        \tau_h(t_h) &= 1 \\
+        t_u &:= \frac{\int_0^d t\,\kappa_u e^{-\kappa_u t}\,dt}{\int_0^d \kappa_u e^{-\kappa_u t}\,dt}
+        = \frac{1}{\kappa_u} - \frac{d\,e^{-\kappa_u d}}{1 - e^{-\kappa_u d}}
+        \end{aligned}
+      \]
+      <p>
+        とする（\(\tau_h(d) \lt 1\) で \(t_h\) がないレイでは \(1/(f\,\mathrm{rd}_y)\) に連続につなぐ）。
+        分母を \(e^{-\kappa_u t_h}\) ではなく \(1/(1 + \kappa_u t_h)\) にしたのは、水平なレイで \(d = \infty\) のとき \(I_h = \kappa_h / (\kappa_h + \kappa_u)\) に一致するからである。
+        コードでは <code>fogMixFactors</code> が分母の逆数 <code>hf</code>、<code>uf</code> を、<code>fogScatterWeights</code> が \(A\)、\(B\)（<code>wa</code>、<code>wb</code>）を返す。
+        \(A\)、\(B\) と数値積分した \(I_h\)、\(I_u\) の差は、既定のパラメータに距離フォグ 0.005〜0.08 を加えた範囲で最大 0.06 である。
+        片方のフォグしかなければ分母が 1 になり \(A = I_h\)、\(B = I_u\) で厳密である。内散乱は
+      </p>
+      \[
+        \bigl(1 - T(c, x_d)\bigr)\,\frac{(L_a\rho + E)\,A + L_a\rho_u\,B}{A + B}
+      \]
+      <p>
+        とする（<code>fogScatterWeights</code>、<code>mixByScatter</code>）。\(A + B\) で割るのは、\(I_h + I_u = 1 - T(c, x_d)\) は厳密だが \(A + B\) はそうではないので、
+        近似を 2 つの係数の重みだけに入れて合計は厳密な \(1 - T(c, x_d)\) に合わせるためである。
+        コードの <code>mixByScatter(h, u, wa, wb)</code> は \((h\,A + u\,B) / (A + B)\) を返す。
+      </p>
+      <pre><code class="language-glsl">vec3 T = fogTransmittance(ro, rd, d);
+vec3 wa, wb;
+fogScatterWeights(ro, rd, d, wa, wb);
+vec3 inscatter = u_ambient * mixByScatter(u_albedo, u_uniformAlbedo, wa, wb) * (1.0 - T);
+col = col * T + inscatter + mixByScatter(u_emission, vec3(0.0), wa, wb) * (1.0 - T);</code></pre>
+      <p>
+        <strong>太陽光と距離フォグ</strong>。太陽の減衰（5.1）とサーフェスに届く環境光（6 節）では距離フォグを考えない。
+        太陽光のカメラへの内散乱（5.2）は、\(T(c, x_t)\) に \(e^{-\kappa_u t}\) が掛かると閉じないので、\(A\) と同じ係数 \(1/(1 + \kappa_u t_h)\)（<code>hf</code>）を掛ける。
+        距離フォグ自身の太陽光の散乱は考えない。
+      </p>
+
+      <!-- ------------------------------------------------------------ -->
+      <h2 id="approximations">11. 近似の一覧</h2>
       <p>どこが厳密でどこが近似かをまとめる。「モデルの下で厳密」とは、単散乱・平行光源・一様な環境光というモデルを認めた上で積分に近似がないことを指す。</p>
       <div class="note-table-wrap">
       <table class="note-table">
@@ -521,23 +500,23 @@ T = pow(T, R);</code></pre>
         </thead>
         <tbody>
           <tr><td>高さフォグ・距離フォグの透過率</td><td>厳密</td><td>光学的深さの閉じた式（3 節）</td></tr>
-          <tr><td>環境光の内散乱 \(\rho L_a (1 - T)\)</td><td>モデルの下で厳密</td><td>\(L_s\) がレイ上で一定なので積分の外に出て、\(\int T\kappa\,dt = 1 - T\)（4 節）</td></tr>
+          <tr><td>環境光の内散乱 \(\rho L_a (1 - T)\)</td><td>モデルの下で厳密</td><td>\(L_s\) がレイ上で一定なので積分の外に出て、\(\int_0^d T(c, x_t)\,\kappa(x_t)\,dt = 1 - T(c, x_d)\)（4 節）</td></tr>
           <tr><td>発光 \(E(1 - T)\)</td><td>モデルの下で厳密</td><td>\(L_e = E\kappa\) と仮定（4 節）</td></tr>
-          <tr><td>高さフォグと距離フォグの混合</td><td>近似</td><td>\(I_h \approx A\)、\(I_u \approx B\)。最大誤差 0.06。片方だけなら厳密（4 節）</td></tr>
-          <tr><td>太陽の減衰 \(T_l\)</td><td>モデルの下で厳密</td><td>\(d = \infty\) の閉じた式。距離フォグは入れない（5.1）</td></tr>
-          <tr><td>太陽のカメラへの内散乱</td><td>モデルの下で厳密</td><td>\(\int T\kappa e^{s u}dt\) の閉じた式。距離フォグがあるときは混合と同じ近似（5.2）</td></tr>
+          <tr><td>高さフォグと距離フォグの混合</td><td>近似</td><td>\(I_h \approx A\)、\(I_u \approx B\)。最大誤差 0.06。片方だけなら厳密（10 節）</td></tr>
+          <tr><td>太陽の減衰 \(T_\infty(p, l)\)</td><td>モデルの下で厳密</td><td>\(d = \infty\) の閉じた式。距離フォグは考えない（5.1）</td></tr>
+          <tr><td>太陽のカメラへの内散乱</td><td>モデルの下で厳密</td><td>\(\int_0^d T(c, x_t)\,\kappa(x_t)\,T_\infty(x_t, l)\,dt\) の閉じた式。距離フォグがあるときは混合と同じ近似（10 節）</td></tr>
           <tr><td>太陽のサーフェスへの内散乱</td><td>近似</td><td>半球積分を代表方向 1 本で評価。影は見ない（5.3）</td></tr>
-          <tr><td>サーフェスの環境光 \(\langle T \rangle\)</td><td>近似</td><td>diffusivity factor \(e^{-1.5\tau_\uparrow}\)。サーフェスの向きを見ない。上向きのサーフェスではよく合う（6 節）</td></tr>
+          <tr><td>サーフェスの環境光 \(\Phi(p)\)</td><td>近似</td><td>代表方向 1 本の \(T_\infty(p, \hat\omega)\) で置き換える。上向きのサーフェスで差は 0.04 以下、側面はそれより大きい（6 節）</td></tr>
           <tr><td>位相関数</td><td>モデルの下で厳密</td><td>平行光源なのでレイ上で定数（7 節）。5.3 では代表方向の近似に乗る</td></tr>
-          <tr><td>光芒</td><td>数値積分</td><td>32 ステップの等間隔レイマーチ + ずらし。48 単位より先は閉じた式（8 節）</td></tr>
-          <tr><td>ノイズ \(\tilde\tau = \bar R \tau\)</td><td>関係は厳密、\(\bar R\) は見積もり</td><td>10 本のサンプルの \(\kappa\) 重み付き平均。太陽への透過率とサーフェスの環境光は見ない（9 節）</td></tr>
+          <tr><td>光芒</td><td>数値積分</td><td>32 ステップの等間隔レイマーチ + ずらし。48 m より先は閉じた式（8 節）</td></tr>
+          <tr><td>ノイズ \(\tilde\tau(c, x_d) = \bar R(c, x_d)\,\tau(c, x_d)\)</td><td>等式は厳密、\(\bar R(c, x_d)\) は見積もり</td><td>10 本のサンプルの \(\kappa\) 重み付き平均。太陽への透過率とサーフェスの環境光は見ない（9 節）</td></tr>
           <tr><td>多重散乱</td><td>なし</td><td>単散乱のみ。多重散乱で生じる成分は環境光 \(L_a\) で代用している</td></tr>
         </tbody>
       </table>
       </div>
 
       <!-- ------------------------------------------------------------ -->
-      <h2 id="references">11. 参考文献</h2>
+      <h2 id="references">12. 参考文献</h2>
       <ol class="note-refs">
         <li>Wenzel, Carsten. "Real-Time Atmospheric Effects in Games Revisited." GDC 2007.（指数関数高さフォグの閉じた式）</li>
         <li>Henyey, L. G. and Greenstein, J. L. "Diffuse radiation in the Galaxy." Astrophysical Journal 93 (1941).（HG 位相関数）</li>

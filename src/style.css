@@ -130,6 +130,14 @@ body.slides {
   display: none;
 }
 
+/* 区切りのページ: 見出しなしで中央に 1 文だけ大きく */
+.stage.layout-text .body .banner {
+  font-size: 120px;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 220px;
+}
+
 .stage.layout-text .body {
   font-size: 58px;
 }

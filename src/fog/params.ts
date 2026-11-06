@@ -12,12 +12,14 @@ export type FogParams = {
   baseHeight: Vec3
   /** 高さに依存しない一様フォグの消散係数 (1/長さ)。density と同じく「密度」と呼んでいるが実体は κ */
   uniformDensity: Vec3
+  /** 距離フォグの散乱アルベド (sRGB、0..1)。距離フォグの色 = ambient * uniformAlbedo。
+   *  無限に広がる一様フォグでは空の色 = フォグの色なので、サーフェスの環境光 (ambient) と一致させるには 1 が自然。既定 1 */
+  uniformAlbedo: Vec3
   /** 環境光 (sRGB)。面のアンビエントにも、フォグの内散乱にも使う */
   ambient: Vec3
-  /** 高さフォグの散乱アルベド (0..1)。フォグの色 = ambient * albedo + emission。
-   *  距離フォグにはアルベドがない (無限に広がる一様フォグでは空の色 = フォグの色なので、フォグの色 = ambient) */
+  /** 高さフォグの散乱アルベド (sRGB、0..1)。フォグの色 = ambient * albedo + emission */
   albedo: Vec3
-  /** 高さフォグ自体が発する光。距離フォグにはない (アルベドと同じ理由。無限に広がる一様フォグの放射 = ambient なので発光は ambient に含まれる) */
+  /** 高さフォグ自体が発する光 (sRGB)。距離フォグにはない (無限に広がる一様フォグの放射 = ambient なので発光は ambient に含まれる) */
   emission: Vec3
   /** 平行光源 (太陽) の色 (sRGB、0..1)。強さは sunIntensity */
   lightColor: Vec3
@@ -39,6 +41,7 @@ export const defaultFogParams = (): FogParams => ({
   falloff: [0.5, 0.5, 0.5],
   baseHeight: [0.0, 0.0, 0.0],
   uniformDensity: [0, 0, 0],
+  uniformAlbedo: [1, 1, 1],
   ambient: [0.54, 0.54, 0.54], // 暗めのグレー (リニア 0.25)。太陽は暖色 (slides.ts と揃える)
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
@@ -57,6 +60,7 @@ export const cloneParams = (p: FogParams): FogParams => ({
   falloff: [...p.falloff],
   baseHeight: [...p.baseHeight],
   uniformDensity: [...p.uniformDensity],
+  uniformAlbedo: [...p.uniformAlbedo],
   ambient: [...p.ambient],
   albedo: [...p.albedo],
   emission: [...p.emission],
@@ -77,6 +81,7 @@ export const lerpParams = (out: FogParams, from: FogParams, to: FogParams, t: nu
   lerpVec(out.falloff, from.falloff, to.falloff, t)
   lerpVec(out.baseHeight, from.baseHeight, to.baseHeight, t)
   lerpVec(out.uniformDensity, from.uniformDensity, to.uniformDensity, t)
+  lerpVec(out.uniformAlbedo, from.uniformAlbedo, to.uniformAlbedo, t)
   lerpVec(out.ambient, from.ambient, to.ambient, t)
   lerpVec(out.albedo, from.albedo, to.albedo, t)
   lerpVec(out.emission, from.emission, to.emission, t)

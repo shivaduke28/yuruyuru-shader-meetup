@@ -30,6 +30,8 @@ export type Slide = {
   noise?: Partial<typeof DEFAULT_NOISE>
   /** 太陽光の散乱の Henyey-Greenstein の g (renderer.phaseG)。指定するとスライダーも出る。省略時は 0 (等方) */
   phaseG?: number
+  /** 高さフォグと距離フォグの合成 (renderer.fogMixMode)。0: 散乱量の比、1: 高さ→距離の順、2: 距離→高さの順。指定すると選択式が出る。省略時は 0 */
+  fogMixMode?: 0 | 1 | 2
   /** トグルを出すものを絞る。省略時は fogAmbient / fogSun / sunShadow / noise のうち指定したもの全部 */
   toggles?: ('fogAmbient' | 'fogSun' | 'sunShadow' | 'noise')[]
   /** 太陽の向き (度)。省略時は renderer の既定 (カメラの後ろ上からの順光) */
@@ -60,6 +62,7 @@ const plain: Partial<FogParams> = {
   falloff: [0.5, 0.5, 0.5],
   baseHeight: [1, 1, 1],
   uniformDensity: [0, 0, 0],
+  uniformAlbedo: [1, 1, 1],
   ambient,
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
@@ -72,6 +75,7 @@ const rgb: Partial<FogParams> = {
   falloff: [0.35, 0.55, 0.9],
   baseHeight: [0, 1.5, 3],
   uniformDensity: [0, 0, 0],
+  uniformAlbedo: [1, 1, 1],
   ambient,
   albedo: [1, 1, 1],
   emission: [0, 0, 0],
@@ -101,7 +105,7 @@ const heightControls = [
   [controlPresets.ambient, controlPresets.albedo],
 ]
 
-// 距離フォグの色は環境光そのもの (無限に広がる一様フォグでは空の色 = フォグの色)
+// 距離フォグの色は環境光そのもの (アルベドは albedo のスライドで 1 にすると決めて、以降の式では省く)
 // スライドのコードでは透過率を T と書き、高さフォグの透過率は heightFogTransmittance で呼ぶ (生の exp はここだけ)
 const distanceFogCode = code(`vec3 fogColor = ambient;
 float T = exp(-density * dist); // 透過率: 距離 dist で残る光の割合
@@ -122,7 +126,9 @@ const uniformVariation = (
   body: `<p>${body}</p>`,
 })
 
-const heightFogCode = code('float fogDensity = density * exp(-falloff * (pos.y - height)); // 高さ pos.y での濃さ')
+const heightFogCode = code(`float fogDensity(vec3 pos) {
+  return density * exp(-falloff * (pos.y - height));
+}`)
 
 // 高さフォグの基準値 (plain) から 1 つだけパラメータを変えたスライド。変えたものと結果を本文で言う
 const heightVariation = (
@@ -205,20 +211,40 @@ export const slides: Slide[] = [
   uniformVariation('uniform-fog-thin', 0.01, 'density を小さくすると、フォグが薄くなって遠くまで見える'),
   uniformVariation('uniform-fog-ambient', 0.05, 'ambient を変更すると、フォグだけでなく空や床の色も変わる', [1, 0, 0]),
   {
+    id: 'uniform-fog-albedo',
+    layout: 'demo',
+    title: '距離フォグ',
+    // アルベドを下げると遠くのフォグ (= 空) だけが暗くなり、サーフェスに届く環境光と合わなくなるのを見せる
+    params: { ...uniform, uniformAlbedo: [1, 0, 0] },
+    controls: [controlPresets.ambient, controlPresets.uniformAlbedo, controlPresets.uniform],
+    side: code(`vec3 fogColor = ambient * albedo;
+float T = exp(-density * dist); // 透過率: 距離 dist で残る光の割合
+color = mix(fogColor, color, T);`),
+    body: `
+      <ul>
+        <li>albedo: フォグが環境光をどのくらい散乱して返すか</li>
+        <li>環境光とフォグの色を変えることができる</li>
+        <li>※距離フォグは無限に広がるので、本当は空と同じ色の方が自然</li>
+      </ul>`,
+  },
+  {
     id: 'uniform-fog-rgb',
     layout: 'demo',
     title: 'density を RGB にする',
-    // Playground の water プリセット: 赤から順に吸われ、環境光は暗めの青
+    // Playground の water プリセット: 赤が早く吸われて遠くが青緑になる。環境光は暗めの青緑、太陽は真上から青白く弱め
     params: {
       ...uniform,
-      uniformDensity: [0.16, 0.08, 0.04],
-      ambient: [0.35, 0.54, 0.7],
+      uniformDensity: [0.2, 0.09, 0.035],
+      ambient: [0.16, 0.42, 0.55],
+      lightColor: [0.75, 0.9, 1],
+      sunIntensity: 1.2,
     },
+    sun: { azimuth: 160, elevation: 70 }, // 方位 0 はカメラの正面 (逆光) なので後ろ寄りにする
     controls: [controlPresets.ambient, controlPresets.uniformRGB],
     side: code(`vec3 fogColor = ambient;
 vec3 T = exp(-density * dist); // density を vec3 にするだけ
 color = mix(fogColor, color, T);`),
-    body: '<p>density を RGB ごとに変えると、距離によって色が変わる。水の中のように赤から順に吸われる</p>',
+    body: '<p>水などを再現する場合は RGB ごとに density を変える</p>',
   },
   assumptions('assumptions'),
   assumptions('assumptions-highlight', 0),
@@ -232,9 +258,9 @@ color = mix(fogColor, color, T);`),
     body: `
       <p>低いところほど濃いフォグ</p>
       <ul>
-        <li>density: 基準の高さでの濃さ</li>
-        <li>falloff: 上に行くほど薄くなる速さ</li>
-        <li>height: 基準の高さ</li>
+        <li>density: フォグ全体の濃さ</li>
+        <li>falloff: 減衰の速さ</li>
+        <li>height: 減衰が始まる高さ</li>
         <li>albedo: フォグが環境光をどのくらい反射するか。フォグの色 = ambient × albedo</li>
       </ul>`,
   },
@@ -259,7 +285,9 @@ color = mix(fogColor, color, T);`),
 vec3 fogColor = ambient * albedo;
 float T = heightFogTransmittance(camPos, rayDir, dist);
 color = mix(fogColor, color, T);`),
-    body: '<p>この式はボリュームレンダリング方程式から出てくるが、導出はここでは説明しない</p>',
+    body: `
+      <p>カメラの位置、レイの方向、レイの長さから計算できる</p>
+      <p>ボリュームレンダリング方程式から導出されるが、説明は省略する</p>`,
   },
   {
     id: 'emission',
@@ -286,14 +314,22 @@ color = mix(fogColor, color, T);`),
     ],
     randomize: {
       intervalMs: 1000,
-      density: { min: 0.1, max: 0.8 },
-      falloff: { min: 0.2, max: 1.2 },
-      baseHeight: { min: 0, max: 4 },
-      albedo: { min: 0.48, max: 1 },
-      ambient: { min: 0.25, max: 0.58 },
-      emission: { min: 0, max: 0.58 },
+      density: { min: 0.05, max: 1.5 },
+      falloff: { min: 0.1, max: 1.5 },
+      baseHeight: { min: -2, max: 8 },
+      albedo: { min: 0.2, max: 1 },
+      ambient: { min: 0.15, max: 0.75 },
+      emission: { min: 0, max: 0.7 },
     },
-    body: '<p>float を vec3 にするだけ</p>',
+    body: '<p>float を vec3 にすると、ピーキーだがいろんな絵が出る</p>',
+  },
+  {
+    id: 'advanced',
+    layout: 'text',
+    title: '',
+    // 区切りのページ。見出しなしで中央に 1 文だけ
+    body: '<p class="banner">以下、マニアックな内容。</p>',
+    params: plain,
   },
   {
     id: 'fog-ambient',
@@ -446,6 +482,41 @@ T = pow(T, R / w);                   // 平均で透過率を変える`),
       <ul>
         <li>レイの上の数点で 3D ノイズを読んで平均する。フォグが濃いところを重くする</li>
         <li>その平均 R で、透過率を T の R 乗にする</li>
+      </ul>`,
+  },
+  {
+    id: 'fog-mix',
+    layout: 'demo',
+    title: '距離フォグと高さフォグを両方使う',
+    // 2 つのフォグの色を違えて (高さフォグは橙、距離フォグは青白)、順番に合成したときとの差を見せる
+    params: {
+      ...plain,
+      density: [0.6, 0.6, 0.6],
+      falloff: [0.6, 0.6, 0.6],
+      uniformDensity: [0.03, 0.03, 0.03],
+      albedo: [1, 0.6, 0.3],
+      uniformAlbedo: [0.7, 0.85, 1],
+    },
+    fogMixMode: 1,
+    controls: [
+      [controlPresets.uniform, controlPresets.uniformAlbedo],
+      [controlPresets.density, controlPresets.falloff, controlPresets.albedo],
+    ],
+    side: code(`// 透過率は掛ければよい
+float T = Th * Tu;
+
+// 順番に合成すると、先に合成したフォグが全部もう一方の奥にあることになる
+color = mix(fogColorH, color, Th);
+color = mix(fogColorU, color, Tu); // 逆の順でも同じ種類の間違い
+
+// 2 つのフォグが散乱した量 A, B の比で色を混ぜる
+vec3 fogColor = (fogColorH * A + fogColorU * B) / (A + B);
+color = mix(fogColor, color, T);`),
+    body: `
+      <ul>
+        <li>透過率は光学的深さを足すだけでよい</li>
+        <li>フォグの色が違うときは足せない。順番に合成すると、先に合成したフォグがもう一方の色に染まる</li>
+        <li>それぞれが散乱した量の比で色を混ぜる。この量は閉じた式にならないので近似で見積もる</li>
       </ul>`,
   },
   {

@@ -1,6 +1,6 @@
 import '../style.css'
 import { Pane } from 'tweakpane'
-import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, MIN_SUN_ELEVATION } from '../fog/renderer'
+import { createFogRenderer, DEFAULT_NOISE, DEFAULT_SUN_AZIMUTH, DEFAULT_SUN_ELEVATION, FOG_MIX_OPTIONS, MIN_SUN_ELEVATION } from '../fog/renderer'
 import { assignParams, defaultCamera, defaultFogParams, type FogParams } from '../fog/params'
 import { controlPresets, createFogPane, folderHelp, withHelp } from '../fog/controls'
 
@@ -48,12 +48,14 @@ const presets: Record<string, Preset> = {
     },
   },
   uniform: { params: { density: [0, 0, 0], uniformDensity: [0.02, 0.02, 0.02] } },
-  // 水: 赤から順に吸われ、環境光は暗めの青 (フォグもサーフェスも青く沈む)
+  // 水: 赤が早く吸われて遠くが青緑になる。環境光は暗めの青緑、太陽は青白く弱め (向きは Lights で真上寄りにすると水っぽい)
   water: {
     params: {
       density: [0, 0, 0],
-      uniformDensity: [0.16, 0.08, 0.04],
-      ambient: [0.35, 0.54, 0.7],
+      uniformDensity: [0.2, 0.09, 0.035],
+      ambient: [0.16, 0.42, 0.55],
+      lightColor: [0.75, 0.9, 1],
+      sunIntensity: 1.2,
     },
   },
   // 地面に溜まるガス: 薄い層に濃く、黄緑に散乱、太陽はフォグの中で減衰して散乱、奥がうっすら光る
@@ -123,8 +125,12 @@ withHelp(
 // フォルダはスライドの流れに揃える: 距離フォグ → 高さフォグ → 光源 → 追加要素 → 舞台
 // 距離フォグは density だけで光と相互作用しない。光との相互作用のトグルは全部高さフォグのものなので Height Fog に置く
 const distanceFog = pane.addFolder({ title: 'Distance Fog', expanded: true })
-folderHelp(distanceFog, '高さに依らない一様なフォグ。無限に広がるので空の色 = フォグの色 = ambient。光とは相互作用しない')
-bound.addControls(distanceFog, [controlPresets.uniformRGB])
+folderHelp(distanceFog, '高さに依らない一様なフォグ。無限に広がるので空の色 = フォグの色 = ambient × albedo。光とは相互作用しない')
+bound.addControls(distanceFog, [controlPresets.uniformRGB, controlPresets.uniformAlbedo])
+withHelp(
+  distanceFog.addBinding(renderer, 'fogMixMode', { label: 'mix', options: FOG_MIX_OPTIONS }),
+  '高さフォグとの合成。correct は散乱した量の比で色を混ぜる。他の 2 つは順番に合成する比較用の間違った合成で、先に合成したフォグがもう一方の色に染まる',
+)
 
 const heightFog = pane.addFolder({ title: 'Height Fog', expanded: true })
 folderHelp(heightFog, '高さとともに指数関数で薄くなるフォグ。フォグの色 = ambient × albedo + emission。光との相互作用のトグルもここ')
@@ -230,6 +236,7 @@ withHelp(topPane.addButton({ title: 'Reset' }), 'Camera も含めて全部を既
   renderer.sunAzimuth = DEFAULT_SUN_AZIMUTH
   renderer.sunElevation = DEFAULT_SUN_ELEVATION
   renderer.phaseG = 0
+  renderer.fogMixMode = 0
   renderer.noise = false
   renderer.noiseScale = DEFAULT_NOISE.scale
   renderer.noiseMin = DEFAULT_NOISE.min

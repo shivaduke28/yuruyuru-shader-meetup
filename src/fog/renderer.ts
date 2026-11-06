@@ -23,6 +23,8 @@ const RAD_TO_DEG = 180 / Math.PI
 export const DEFAULT_SUN_AZIMUTH = Math.atan2(0.3, -0.6) * RAD_TO_DEG
 export const DEFAULT_SUN_ELEVATION = Math.atan2(0.7, Math.hypot(0.3, -0.6)) * RAD_TO_DEG
 export const MIN_SUN_ELEVATION = 5
+/** 高さフォグと距離フォグの合成の選択肢 (Tweakpane の options。Playground とスライドで共有) */
+export const FOG_MIX_OPTIONS = { correct: 0, 'height then distance': 1, 'distance then height': 2 } as const
 /** ノイズの既定値 (Playground の Reset とスライドで共有) */
 export const DEFAULT_NOISE = { scale: 1, min: 0, max: 1, speed: 0.5 }
 
@@ -43,6 +45,7 @@ const uniformNames = [
   'u_falloff',
   'u_baseHeight',
   'u_uniformDensity',
+  'u_uniformAlbedo',
   'u_ambient',
   'u_albedo',
   'u_emission',
@@ -59,6 +62,7 @@ const uniformNames = [
   'u_emissionAmbient',
   'u_sunInscatterShadow',
   'u_phaseG',
+  'u_fogMixMode',
   'u_frame',
   'u_noise',
   'u_noiseScale',
@@ -100,6 +104,8 @@ export type FogRenderer = {
   sunInscatterShadow: boolean
   /** 太陽光の散乱の Henyey-Greenstein の g (-1..1)。0 で等方 (lightColor / 4)、正で前方散乱 (太陽の周りが明るい) */
   phaseG: number
+  /** 高さフォグと距離フォグの合成。0: 散乱量の比で色を混ぜる (正しい)、1: 高さ→距離の順に合成、2: 距離→高さの順に合成。1, 2 は比較用の間違った合成 */
+  fogMixMode: 0 | 1 | 2
   /** 消散係数に 3D ノイズをかける (Pickles Note の Noise。視線の透過率にだけ効く) */
   noise: boolean
   /** ノイズの周波数 (1/長さ)。z 方向はワールドの周期で割り切れる値に丸める */
@@ -205,6 +211,7 @@ export const createFogRenderer = (
     gl.uniform3fv(loc.u_falloff, params.falloff)
     gl.uniform3fv(loc.u_baseHeight, params.baseHeight)
     gl.uniform3fv(loc.u_uniformDensity, params.uniformDensity)
+    gl.uniform3fv(loc.u_uniformAlbedo, srgbToLinear(params.uniformAlbedo))
     // 色は sRGB で持っているのでリニアに変換して渡す (Unity のリニアワークフローと同じ)
     gl.uniform3fv(loc.u_ambient, srgbToLinear(params.ambient))
     gl.uniform3fv(loc.u_albedo, srgbToLinear(params.albedo))
@@ -223,6 +230,7 @@ export const createFogRenderer = (
     gl.uniform1i(loc.u_emissionAmbient, renderer.emissionAmbient ? 1 : 0)
     gl.uniform1i(loc.u_sunInscatterShadow, renderer.sunInscatterShadow ? 1 : 0)
     gl.uniform1f(loc.u_phaseG, renderer.phaseG)
+    gl.uniform1i(loc.u_fogMixMode, renderer.fogMixMode)
     gl.uniform1i(loc.u_noise, renderer.noise ? 1 : 0)
     gl.uniform1f(loc.u_noiseScale, renderer.noiseScale)
     gl.uniform1f(loc.u_noiseMin, renderer.noiseMin)
@@ -282,6 +290,7 @@ export const createFogRenderer = (
     emissionAmbient: false,
     sunInscatterShadow: false,
     phaseG: 0,
+    fogMixMode: 0,
     noise: false,
     noiseScale: DEFAULT_NOISE.scale,
     noiseMin: DEFAULT_NOISE.min,
