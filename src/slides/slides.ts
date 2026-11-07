@@ -355,11 +355,11 @@ color = mix(fogColor, color, T);`),
     id: 'fog-sun',
     layout: 'demo',
     title: '太陽光にフォグを適用する',
-    // 環境光を消して太陽だけにし、フォグのアルベドを赤、太陽を黄色にする。太陽のトグルは発表者が 1 つずつ入れる:
+    // 環境光を消して太陽だけにし、フォグのアルベドを赤、太陽を黄色にする。最初から 3 つとも入れておき、発表者がトグルで切って比べる:
     // attenuation で日の当たる面が沈み、inscatter でフォグが黄 × 赤で光り、inscatter ambient でサーフェスにも乗る。
     // 環境光が 0 なので空の 2 つは効かず、トグルも出さない
     params: { ...plain, ambient: [0, 0, 0], albedo: [1, 0, 0], lightColor: [1, 0.92, 0.2] },
-    fogSun: false,
+    fogSun: true,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo, controlPresets.lightColor, controlPresets.sunIntensity],
@@ -385,7 +385,7 @@ color = mix(fogColor, color, T) + sunFog;`),
     // 太陽を消して環境光だけにし、環境光にフォグが効くところだけを見せる (前の太陽のスライドと対になる)。
     // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
     params: { ...plain, albedo: [1, 0, 0], sunIntensity: 0 },
-    fogAmbient: false,
+    fogAmbient: true,
     controls: [
       [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
       [controlPresets.ambient, controlPresets.albedo],
