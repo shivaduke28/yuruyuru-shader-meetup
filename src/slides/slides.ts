@@ -518,7 +518,7 @@ T = pow(T, R / w);                   // 平均で透過率を変える`),
       albedo: [1, 0.6, 0.3],
       uniformAlbedo: [0.7, 0.85, 1],
     },
-    fogMixMode: 1,
+    fogMixMode: 0, // 正しい合成から始め、選択式で順番に合成したものに切り替えて差を見せる
     controls: [
       [controlPresets.uniform, controlPresets.uniformAlbedo],
       [controlPresets.density, controlPresets.falloff, controlPresets.albedo],
