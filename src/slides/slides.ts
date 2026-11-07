@@ -352,29 +352,6 @@ color = mix(fogColor, color, T);`),
     params: plain,
   },
   {
-    id: 'fog-ambient',
-    layout: 'demo',
-    title: 'サーフェスの環境光にフォグを適用する',
-    // 太陽を消して環境光だけにし、環境光にフォグが効くところだけを見せる (太陽のスライドと対になる)。
-    // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
-    params: { ...plain, albedo: [1, 0, 0], sunIntensity: 0 },
-    fogAmbient: false,
-    controls: [
-      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
-      [controlPresets.ambient, controlPresets.albedo],
-    ],
-    side: code(`vec3 skyDir = vec3(0.0, 2.0 / 3.0, sqrt(5.0) / 3.0); // 空へ向かう代表方向 (仰角の cos = 2/3)
-float T = heightFogTransmittance(pos, skyDir, 1e5);
-vec3 ambientHere = ambient * T;                // フォグを通り抜けて届く分
-ambientHere += ambient * albedo * (1.0 - T);   // フォグで散乱して届く分
-color = surfaceColor * (diffuse * sun + ambientHere);`),
-    body: `
-      <ul>
-        <li>環境光を高さフォグで減衰させる</li>
-        <li>フォグで散乱した分を環境光に足す</li>
-      </ul>`,
-  },
-  {
     id: 'fog-sun',
     layout: 'demo',
     title: '太陽光にフォグを適用する',
@@ -389,7 +366,8 @@ color = surfaceColor * (diffuse * sun + ambientHere);`),
     ],
     side: code(`vec3 sun = sunColor * heightFogTransmittance(pos, lightDir, 1e5); // サーフェスに届く太陽光が減衰する
 vec3 sunFog = sunInscatter(camPos, rayDir, dist);                 // 散乱した太陽光がカメラに届く
-ambientHere += sunInscatter(pos, skyDir, 1e5);                    // 散乱した太陽光がサーフェスに届く
+vec3 skyDir = vec3(0.0, 2.0 / 3.0, sqrt(5.0) / 3.0);              // 空へ向かう代表方向 (仰角の cos = 2/3)
+vec3 ambientHere = ambient + sunInscatter(pos, skyDir, 1e5);      // 散乱した太陽光がサーフェスに届く
 color = surfaceColor * (diffuse * sun + ambientHere);
 color = mix(fogColor, color, T) + sunFog;`),
     body: `
@@ -398,6 +376,28 @@ color = mix(fogColor, color, T) + sunFog;`),
         <li>サーフェスに届く太陽光がフォグで減衰する</li>
         <li>太陽光がフォグで散乱してカメラに届く</li>
         <li>太陽光がフォグで散乱してサーフェスに届く（環境光に足す）</li>
+      </ul>`,
+  },
+  {
+    id: 'fog-ambient',
+    layout: 'demo',
+    title: 'サーフェスの環境光にフォグを適用する',
+    // 太陽を消して環境光だけにし、環境光にフォグが効くところだけを見せる (前の太陽のスライドと対になる)。
+    // 効果が出るのは albedo < 1 のときだけなので、赤 (G, B が吸収される) で見せる。面の環境光が赤く沈む
+    params: { ...plain, albedo: [1, 0, 0], sunIntensity: 0 },
+    fogAmbient: false,
+    controls: [
+      [controlPresets.density, controlPresets.falloff, controlPresets.baseHeight],
+      [controlPresets.ambient, controlPresets.albedo],
+    ],
+    side: code(`float T = heightFogTransmittance(pos, skyDir, 1e5);   // 空へ向かう透過率
+vec3 ambientHere = ambient * T;                        // フォグを通り抜けて届く分
+ambientHere += ambient * albedo * (1.0 - T);           // フォグで散乱して届く分
+color = surfaceColor * (diffuse * sun + ambientHere);`),
+    body: `
+      <ul>
+        <li>環境光を高さフォグで減衰させる</li>
+        <li>フォグで散乱した分を環境光に足す</li>
       </ul>`,
   },
   {
